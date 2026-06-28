@@ -28,6 +28,54 @@ import { readSkillFrontmatterSafe } from "./local-loader.js";
 import { loadWorkspaceSkillEntries } from "./workspace.js";
 
 vi.mock("../../plugins/manifest-registry.js", async () => {
+  const directorySymlinkType = process.platform === "win32" ? "junction" : "dir";
+
+  const canCreateDirectorySymlinks = (() => {
+    let probeDir;
+    try {
+      const fsSync = require("node:fs");
+      const path = require("node:path");
+      const os = require("node:os");
+      probeDir = fsSync.mkdtempSync(path.join(os.tmpdir(), "openclaw-dir-symlink-probe-"));
+      const targetDir = path.join(probeDir, "target");
+      const linkDir = path.join(probeDir, "link");
+      fsSync.mkdirSync(targetDir);
+      fsSync.symlinkSync(targetDir, linkDir, directorySymlinkType);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (probeDir) {
+        try {
+          require("node:fs").rmSync(probeDir, { recursive: true, force: true });
+        } catch {}
+      }
+    }
+  })();
+
+  const canCreateFileSymlinks = (() => {
+    let probeDir;
+    try {
+      const fsSync = require("node:fs");
+      const path = require("node:path");
+      const os = require("node:os");
+      probeDir = fsSync.mkdtempSync(path.join(os.tmpdir(), "openclaw-file-symlink-probe-"));
+      const targetFile = path.join(probeDir, "target.txt");
+      const linkFile = path.join(probeDir, "link.txt");
+      fsSync.writeFileSync(targetFile, "content");
+      fsSync.symlinkSync(targetFile, linkFile);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (probeDir) {
+        try {
+          require("node:fs").rmSync(probeDir, { recursive: true, force: true });
+        } catch {}
+      }
+    }
+  })();
+
   const fsLocal = await import("node:fs");
   const pathLocal = await import("node:path");
   return {
@@ -272,7 +320,7 @@ async function createEscapedBundledSkillFixture(params?: {
   });
   await fs.mkdir(bundledDir, { recursive: true });
   const requestedPath = path.join(bundledDir, "escaped-bundled-skill");
-  await fs.symlink(escapedSkillDir, requestedPath, "dir");
+  await fs.symlink(escapedSkillDir, requestedPath, directorySymlinkType);
   return { workspaceDir, outsideDir, bundledDir, escapedSkillDir, requestedPath };
 }
 
@@ -489,7 +537,7 @@ describe("loadWorkspaceSkillEntries", () => {
     expect(entries.map((entry) => entry.skill.name)).toEqual(["local-only"]);
   });
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks || !canCreateFileSymlinks)(
     "skips workspace skill paths that resolve outside the workspace root",
     async () => {
       const workspaceDir = await createTempWorkspaceDir();
@@ -502,7 +550,7 @@ describe("loadWorkspaceSkillEntries", () => {
       });
       await fs.mkdir(path.join(workspaceDir, "skills"), { recursive: true });
       const requestedPath = path.join(workspaceDir, "skills", "escaped-skill");
-      await fs.symlink(escapedSkillDir, requestedPath, "dir");
+      await fs.symlink(escapedSkillDir, requestedPath, directorySymlinkType);
       const fileLinkSkillDir = path.join(workspaceDir, "skills", "escaped-file");
       await fs.mkdir(fileLinkSkillDir, { recursive: true });
       await fs.symlink(path.join(outsideDir, "SKILL.md"), path.join(fileLinkSkillDir, "SKILL.md"));
@@ -532,7 +580,7 @@ describe("loadWorkspaceSkillEntries", () => {
     },
   );
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "allows configured skill symlink targets outside their source root",
     async () => {
       const workspaceDir = await createTempWorkspaceDir();
@@ -547,7 +595,7 @@ describe("loadWorkspaceSkillEntries", () => {
       const workspaceSkillsDir = path.join(workspaceDir, "skills");
       await fs.mkdir(workspaceSkillsDir, { recursive: true });
       const symlinkPath = path.join(workspaceSkillsDir, skillName);
-      await fs.symlink(targetSkillDir, symlinkPath, "dir");
+      await fs.symlink(targetSkillDir, symlinkPath, directorySymlinkType);
       const warn = captureWarningLogger();
 
       try {
@@ -569,7 +617,7 @@ describe("loadWorkspaceSkillEntries", () => {
     },
   );
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "loads managed skill directory symlinks outside the managed root",
     async () => {
       const workspaceDir = await createTempWorkspaceDir();
@@ -583,7 +631,7 @@ describe("loadWorkspaceSkillEntries", () => {
       });
       await fs.mkdir(managedDir, { recursive: true });
       const symlinkPath = path.join(managedDir, skillName);
-      await fs.symlink(targetSkillDir, symlinkPath, "dir");
+      await fs.symlink(targetSkillDir, symlinkPath, directorySymlinkType);
       const warn = captureWarningLogger();
 
       try {
@@ -599,7 +647,7 @@ describe("loadWorkspaceSkillEntries", () => {
     },
   );
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks || !canCreateFileSymlinks)(
     "keeps SKILL.md containment for managed symlinked skill directories",
     async () => {
       const workspaceDir = await createTempWorkspaceDir();
@@ -617,7 +665,7 @@ describe("loadWorkspaceSkillEntries", () => {
       await fs.symlink(path.join(outsideDir, "SKILL.md"), path.join(targetSkillDir, "SKILL.md"));
       await fs.mkdir(managedDir, { recursive: true });
       const symlinkPath = path.join(managedDir, skillName);
-      await fs.symlink(targetSkillDir, symlinkPath, "dir");
+      await fs.symlink(targetSkillDir, symlinkPath, directorySymlinkType);
       const warn = captureWarningLogger();
 
       try {
@@ -636,7 +684,7 @@ describe("loadWorkspaceSkillEntries", () => {
     },
   );
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "calls out bundled symlink escapes with compact home-relative paths",
     async () => {
       const { workspaceDir, bundledDir, requestedPath } = await createEscapedBundledSkillFixture();
@@ -657,7 +705,7 @@ describe("loadWorkspaceSkillEntries", () => {
     },
   );
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "uses compact home-relative paths in escaped skill console warnings",
     async () => {
       const { workspaceDir, bundledDir } = await createEscapedBundledSkillFixture({
@@ -677,7 +725,7 @@ describe("loadWorkspaceSkillEntries", () => {
     },
   );
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "reads skill frontmatter when the allowed root is the filesystem root",
     async () => {
       const workspaceDir = await createTempWorkspaceDir();
@@ -961,7 +1009,7 @@ describe("loadWorkspaceSkillEntries", () => {
       expect(names).not.toContain("outside-child");
     });
 
-    it.runIf(process.platform !== "win32")(
+    it.skipIf(!canCreateDirectorySymlinks)(
       "does not follow outside symlink dirs during repo-root detection",
       async () => {
         const workspaceDir = await createTempWorkspaceDir();
@@ -993,7 +1041,7 @@ describe("loadWorkspaceSkillEntries", () => {
       },
     );
 
-    it.runIf(process.platform !== "win32")(
+    it.skipIf(!canCreateDirectorySymlinks)(
       "keeps configured roots with possible symlink skills outside nested skills",
       async () => {
         const workspaceDir = await createTempWorkspaceDir();
