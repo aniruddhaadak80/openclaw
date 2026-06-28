@@ -1,4 +1,5 @@
 // Covers plugin marketplace catalog loading and validation.
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +10,30 @@ import {
   cleanupTrackedTempDirsAsync,
   makeTrackedTempDirAsync,
 } from "./test-helpers/fs-fixtures.js";
+
+const directorySymlinkType = process.platform === "win32" ? "junction" : "dir";
+
+const canCreateDirectorySymlinks = (() => {
+  let probeDir: string | undefined;
+  try {
+    probeDir = fsSync.mkdtempSync(
+      path.join(os.tmpdir(), "openclaw-marketplace-dir-symlink-probe-"),
+    );
+    const targetDir = path.join(probeDir, "target");
+    const linkDir = path.join(probeDir, "link");
+    fsSync.mkdirSync(targetDir);
+    fsSync.symlinkSync(targetDir, linkDir, directorySymlinkType);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (probeDir) {
+      try {
+        fsSync.rmSync(probeDir, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+})();
 
 const installPluginFromPathMock = vi.fn();
 const fetchWithSsrFGuardMock = vi.hoisted(() =>
@@ -138,7 +163,7 @@ function mockRemoteMarketplaceCloneWithOutsideSymlink(params: {
     await fs.mkdir(path.dirname(path.join(repoDir as string, params.symlinkPath)), {
       recursive: true,
     });
-    await fs.symlink(outsideDir, path.join(repoDir as string, params.symlinkPath));
+    await fs.symlink(outsideDir, path.join(repoDir as string, params.symlinkPath), directorySymlinkType);
     return { code: 0, stdout: "", stderr: "", killed: false };
   });
 }
@@ -653,7 +678,7 @@ describe("marketplace plugins", () => {
     });
   });
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "rejects remote marketplace plugin paths that resolve through symlinks outside the cloned repo",
     async () => {
       mockRemoteMarketplaceCloneWithOutsideSymlink({
@@ -1269,7 +1294,7 @@ describe("marketplace plugins", () => {
     await expectRemoteMarketplaceError({ manifest, expectedError });
   });
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "rejects remote marketplace symlink plugin paths during manifest validation",
     async () => {
       mockRemoteMarketplaceCloneWithOutsideSymlink({
