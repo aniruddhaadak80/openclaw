@@ -1,4 +1,5 @@
 // Workspace sync tests cover skill synchronization between workspace and runtime state.
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +7,30 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { withEnv, withEnvAsync } from "../../test-utils/env.js";
 import { writeSkill } from "../test-support/e2e-test-helpers.js";
 import { buildWorkspaceSkillsPrompt, syncSkillsToWorkspace } from "./workspace.js";
+
+const directorySymlinkType = process.platform === "win32" ? "junction" : "dir";
+
+const canCreateDirectorySymlinks = (() => {
+  let probeDir: string | undefined;
+  try {
+    probeDir = fsSync.mkdtempSync(
+      path.join(os.tmpdir(), "openclaw-workspace-sync-dir-symlink-probe-"),
+    );
+    const targetDir = path.join(probeDir, "target");
+    const linkDir = path.join(probeDir, "link");
+    fsSync.mkdirSync(targetDir);
+    fsSync.symlinkSync(targetDir, linkDir, directorySymlinkType);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (probeDir) {
+      try {
+        fsSync.rmSync(probeDir, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+})();
 
 vi.mock("./plugin-skills.js", () => ({
   resolvePluginSkillDirs: () => [],
@@ -208,7 +233,7 @@ describe("buildWorkspaceSkillsPrompt", () => {
       false,
     );
   });
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "does not sync workspace skills that resolve outside the source workspace root",
     async () => {
       const sourceWorkspace = await createCaseDir("source");
@@ -225,7 +250,7 @@ describe("buildWorkspaceSkillsPrompt", () => {
       await fs.symlink(
         outsideSkillDir,
         path.join(sourceWorkspace, "skills", "escaped-skill"),
-        "dir",
+        directorySymlinkType,
       );
 
       await syncSourceSkillsToTarget(sourceWorkspace, targetWorkspace);
