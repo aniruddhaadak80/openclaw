@@ -1,4 +1,31 @@
 // Skill refresh tests cover runtime reload events and refresh-state updates.
+
+import _fsSync from "node:fs";
+import _os from "node:os";
+import _path from "node:path";
+
+const directorySymlinkType = process.platform === "win32" ? "junction" : "dir";
+
+const canCreateDirectorySymlinks = (() => {
+  let probeDir;
+  try {
+    probeDir = _fsSync.mkdtempSync(_path.join(_os.tmpdir(), "openclaw-dir-symlink-probe-"));
+    const targetDir = _path.join(probeDir, "target");
+    const linkDir = _path.join(probeDir, "link");
+    _fsSync.mkdirSync(targetDir);
+    _fsSync.symlinkSync(targetDir, linkDir, directorySymlinkType);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (probeDir) {
+      try {
+        _fsSync.rmSync(probeDir, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+})();
+
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -333,7 +360,7 @@ describe("ensureSkillsWatcher", () => {
     }
   });
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "watches allowed symlink skill targets without following every root symlink",
     async () => {
       const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-watch-symlink-"));
@@ -369,7 +396,7 @@ describe("ensureSkillsWatcher", () => {
     },
   );
 
-  it.runIf(process.platform !== "win32")("watches symlinked skill root targets", async () => {
+  it.skipIf(!canCreateDirectorySymlinks)("watches symlinked skill root targets", async () => {
     const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-watch-root-link-"));
     const targetSkillsDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "openclaw-watch-root-link-target-"),
@@ -396,7 +423,7 @@ describe("ensureSkillsWatcher", () => {
     }
   });
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "does not watch untrusted companion skills symlink targets",
     async () => {
       const workspaceDir = await fs.mkdtemp(
@@ -682,7 +709,7 @@ describe("ensureSkillsWatcher", () => {
     }
   });
 
-  it.runIf(process.platform !== "win32")(
+  it.skipIf(!canCreateDirectorySymlinks)(
     "does not watch untrusted plugin skill symlink targets",
     async () => {
       const pluginDir = await fs.mkdtemp(
