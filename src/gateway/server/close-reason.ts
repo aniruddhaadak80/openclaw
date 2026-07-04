@@ -15,5 +15,11 @@ export function truncateCloseReason(reason: string, maxBytes = CLOSE_REASON_MAX_
   if (buf.length <= maxBytes) {
     return reason;
   }
-  return buf.subarray(0, maxBytes).toString();
+  // Back the cut up to a UTF-8 code point boundary so the truncated reason
+  // stays valid UTF-8 and never re-encodes beyond maxBytes.
+  let end = maxBytes;
+  while (end > 0 && ((buf[end] ?? 0) & 0xc0) === 0x80) {
+    end -= 1;
+  }
+  return buf.toString("utf8", 0, end);
 }
