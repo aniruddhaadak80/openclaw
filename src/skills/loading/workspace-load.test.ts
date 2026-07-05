@@ -1094,7 +1094,7 @@ description: Broken skill
           description: "Outside linked skill",
         });
         await fs.mkdir(path.join(repoDir, "examples"), { recursive: true });
-        await fs.symlink(outsideDir, path.join(repoDir, "examples", "linked"), "dir");
+        await fs.symlink(outsideDir, path.join(repoDir, "examples", "linked"), directorySymlinkType);
         await writeSkill({
           dir: path.join(repoDir, "skills", "group", "valid"),
           name: "repo-nested-skill",
@@ -1127,7 +1127,7 @@ description: Broken skill
           description: "Allowed linked skill",
         });
         await fs.mkdir(path.join(repoDir, "group"), { recursive: true });
-        await fs.symlink(targetSkillDir, path.join(repoDir, "group", "linked-skill"), "dir");
+        await fs.symlink(targetSkillDir, path.join(repoDir, "group", "linked-skill"), directorySymlinkType);
         await writeSkill({
           dir: path.join(repoDir, "skills", "group", "valid"),
           name: "repo-nested-skill",
