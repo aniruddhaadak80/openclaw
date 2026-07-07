@@ -1,5 +1,6 @@
 // Delivery queue recovery drains pending outbound sends with backoff, crash
 // replay protection, unknown-send reconciliation, and failed-entry pruning.
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   resolveDateTimestampMs,
   resolveExpiresAtMsFromDurationMs,
@@ -805,6 +806,8 @@ export async function recoverPendingDeliveries(opts: {
     } finally {
       releaseSharedRecoveryEntry(entriesInProgress, entry.id);
     }
+    // Jitter to prevent thundering herds on mass recovery
+    await sleep(50 + Math.random() * 100);
   }
 
   opts.log.info(
