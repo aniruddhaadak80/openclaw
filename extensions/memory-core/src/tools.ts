@@ -383,15 +383,20 @@ async function executeMemoryReadResult(params: {
   try {
     const result = await params.read();
     if (params.requestedCorpus === "all" && isMissingMemoryReadResult(result, params.relPath)) {
-      const supplement = await getSupplementMemoryReadResult({
-        relPath: params.relPath,
-        from: params.from,
-        lines: params.lines,
-        agentSessionKey: params.agentSessionKey,
-        corpus: params.requestedCorpus,
-      });
-      if (supplement) {
-        return jsonResult(supplement);
+      try {
+        const supplement = await getSupplementMemoryReadResult({
+          relPath: params.relPath,
+          from: params.from,
+          lines: params.lines,
+          agentSessionKey: params.agentSessionKey,
+          corpus: params.requestedCorpus,
+        });
+        if (supplement) {
+          return jsonResult(supplement);
+        }
+      } catch {
+        // Supplement lookup is best-effort after the primary memory read succeeded but found nothing.
+        // Ignore the error and return the original empty result.
       }
     }
     return jsonResult(result);
