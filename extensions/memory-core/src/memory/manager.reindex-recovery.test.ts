@@ -6,7 +6,10 @@ import { DatabaseSync } from "node:sqlite";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/memory-core-host-engine-foundation";
 import { resetPluginStateStoreForTests } from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import { resolveOpenClawAgentSqlitePath } from "openclaw/plugin-sdk/sqlite-runtime";
-import { closeOpenClawAgentDatabasesForTest } from "openclaw/plugin-sdk/sqlite-runtime-testing";
+import {
+  closeOpenClawAgentDatabasesForTest,
+  closeOpenClawStateDatabaseForTest,
+} from "openclaw/plugin-sdk/sqlite-runtime-testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetEmbeddingMocks } from "./embedding.test-mocks.js";
 import { acquireMemoryReindexLock } from "./manager-reindex-lock.js";
@@ -46,18 +49,20 @@ describe("memory manager reindex recovery", () => {
   });
 
   afterEach(async () => {
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
     if (manager) {
       await manager.close();
       manager = null;
     }
     const { closeAllMemorySearchManagers } = await import("./index.js");
     await closeAllMemorySearchManagers();
+    closeOpenClawAgentDatabasesForTest();
     // The agent close releases its leases through shared state and reopens it, so the
     // shared handle is released second; otherwise Windows fails the removal with EBUSY.
     closeOpenClawAgentDatabasesForTest();
+    closeOpenClawStateDatabaseForTest();
     resetPluginStateStoreForTests();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     await fs.rm(fixtureRoot, { recursive: true, force: true });
   });
 
