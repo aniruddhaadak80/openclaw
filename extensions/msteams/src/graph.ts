@@ -35,7 +35,10 @@ export type GraphChannel = {
   displayName?: string;
 };
 
-export type GraphResponse<T> = { value?: T[] };
+export type GraphResponse<T> = {
+  value?: T[];
+  "@odata.nextLink"?: string;
+};
 
 export function normalizeQuery(value?: string | null): string {
   return value?.trim() ?? "";
@@ -128,6 +131,7 @@ export async function fetchGraphAbsoluteUrl<T>(params: {
   token: string;
   url: string;
   headers?: Record<string, string>;
+  deadline?: MSTeamsRequestDeadline;
 }): Promise<T> {
   const { response, release } = await fetchWithSsrFGuard({
     url: params.url,
@@ -139,7 +143,7 @@ export async function fetchGraphAbsoluteUrl<T>(params: {
       },
     },
     auditContext: "msteams.graph.absolute",
-    timeoutMs: MSTEAMS_REQUEST_TIMEOUT_MS,
+    timeoutMs: resolveMSTeamsRequestTimeoutMs(params.deadline),
   });
   try {
     if (!response.ok) {

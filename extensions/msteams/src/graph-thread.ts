@@ -1,6 +1,6 @@
 // Msteams plugin module implements graph thread behavior.
 import { decodeHtmlEntities } from "openclaw/plugin-sdk/html-entity-runtime";
-import { fetchGraphJson, type GraphResponse } from "./graph.js";
+import { fetchGraphAbsoluteUrl, fetchGraphJson, type GraphResponse } from "./graph.js";
 import type { MSTeamsRequestDeadline } from "./request-timeout.js";
 
 export type GraphThreadMessage = {
@@ -103,17 +103,33 @@ export async function fetchThreadReplies(
   limit = 50,
   deadline?: MSTeamsRequestDeadline,
 ): Promise<GraphThreadMessage[]> {
-  const top = Math.min(Math.max(limit, 1), 50);
   // NOTE: Graph replies endpoint returns oldest-first and does not support $orderby.
-  // For threads with >50 replies, only the oldest 50 are returned. The most recent
-  // replies (often the most relevant context) may be truncated.
-  const path = `/teams/${encodeURIComponent(groupId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/replies?$top=${top}&$select=id,from,body,createdDateTime`;
-  const res = await fetchGraphJson<GraphResponse<GraphThreadMessage>>({
-    token,
-    path,
-    ...(deadline ? { deadline } : {}),
-  });
-  return res.value ?? [];
+  // We fetch up to 50 at a time and paginate to collect all replies, then take the last `limit`.
+  let path: string | undefined =
+    `/teams/${encodeURIComponent(groupId)}/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/replies?$top=50&$select=id,from,body,createdDateTime`;
+  let isAbsoluteUrl = false;
+  const allReplies: GraphThreadMessage[] = [];
+
+  while (path && allReplies.length < 500) {
+    const res: GraphResponse<GraphThreadMessage> = isAbsoluteUrl
+      ? await fetchGraphAbsoluteUrl<GraphResponse<GraphThreadMessage>>({
+          token,
+          url: path,
+          ...(deadline ? { deadline } : {}),
+        })
+      : await fetchGraphJson<GraphResponse<GraphThreadMessage>>({
+          token,
+          path,
+          ...(deadline ? { deadline } : {}),
+        });
+    if (res.value) {
+      allReplies.push(...res.value);
+    }
+    path = res["@odata.nextLink"];
+    isAbsoluteUrl = true;
+  }
+
+  return allReplies.slice(-Math.max(limit, 1));
 }
 
 /**
