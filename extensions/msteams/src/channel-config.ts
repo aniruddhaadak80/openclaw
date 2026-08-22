@@ -14,6 +14,8 @@ export type ResolvedMSTeamsAccount = {
     ReturnType<typeof tryReadSecretFileSync>,
     { status: "configured_unavailable" }
   >["diagnostic"][];
+  dmPolicy?: string;
+  allowFrom?: Array<string | number>;
 };
 
 export const msteamsMeta = {
@@ -48,6 +50,10 @@ export function resolveMSTeamsAccount(cfg: OpenClawConfig): ResolvedMSTeamsAccou
     configured: Boolean(credentials),
     tokenStatus: !credentials ? "missing" : unavailable ? "configured_unavailable" : "available",
     ...(unavailable ? { credentialDiagnostics: [certificate.diagnostic] } : {}),
+    // Exposed so the security adapter can audit the DM policy that runtime
+    // access enforcement (monitor-handler/access.ts) applies to inbound DMs.
+    ...(config?.dmPolicy !== undefined ? { dmPolicy: config.dmPolicy } : {}),
+    ...(config?.allowFrom !== undefined ? { allowFrom: config.allowFrom } : {}),
   };
 }
 

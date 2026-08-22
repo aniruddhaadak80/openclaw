@@ -1078,6 +1078,16 @@ export const msteamsPlugin: ChannelPlugin<ResolvedMSTeamsAccount, ProbeMSTeamsRe
       },
     },
     security: {
+      // Declarative dm block: the SDK normalizes it into resolveDmPolicy so
+      // security audit/doctor evaluate channels.msteams.dmPolicy instead of
+      // silently skipping DM findings for this channel.
+      dm: {
+        channelKey: "msteams",
+        resolvePolicy: (account) => account.dmPolicy,
+        resolveAllowFrom: (account) => account.allowFrom,
+        allowFromPathSuffix: "",
+        normalizeEntry: (raw) => raw.trim().toLowerCase(),
+      },
       collectWarnings: ({ cfg }) => collectMSTeamsSecurityFindings({ cfg }),
     },
     pairing: {

@@ -1814,6 +1814,16 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
       message: feishuMessageAdapter,
     },
     security: {
+      // Declarative dm block: the SDK normalizes it into resolveDmPolicy so
+      // security audit/doctor evaluate channels.feishu.dmPolicy instead of
+      // silently skipping DM findings for this channel.
+      dm: {
+        channelKey: "feishu",
+        resolvePolicy: (account) => account.config?.dmPolicy,
+        resolveAllowFrom: (account) => account.config?.allowFrom,
+        allowFromPathSuffix: "",
+        normalizeEntry: (raw) => raw.trim().toLowerCase(),
+      },
       collectWarnings: ({ cfg, accountId }) => collectFeishuOpenGroupFindings({ cfg, accountId }),
       collectAuditFindings: ({ cfg }) => collectFeishuSecurityAuditFindings({ cfg }),
     },

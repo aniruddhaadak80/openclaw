@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MSTeamsConfigSchema } from "../config-api.js";
 import { msteamsDirectoryContractPlugin } from "../directory-contract-api.js";
 import { msTeamsApprovalAuth } from "./approval-auth.js";
+import { resolveMSTeamsAccount } from "./channel-config.js";
 import { msteamsPlugin } from "./channel.js";
 import { msteamsSetupPlugin } from "./channel.setup.js";
 
@@ -91,6 +92,7 @@ describe("msteamsPlugin", () => {
         enabled: true,
         configured: true,
         tokenStatus: "available",
+        allowFrom: ["OWNER", "  Team.Member  "],
       });
       expect(plugin.config.resolveAllowFrom?.({ cfg, accountId: "default" })).toEqual([
         "OWNER",
@@ -463,5 +465,66 @@ describe("msTeamsApprovalAuth", () => {
 
   it("preserves implicit same-chat fallback for display-name-only allowlists", () => {
     expect(authorizeApproval(["Owner Display"], "attacker-aad")).toEqual({ authorized: true });
+  });
+});
+
+describe("msteamsPlugin security", () => {
+  it("resolves the configured DM policy for audit instead of skipping the channel", () => {
+    const cfg = {
+      channels: {
+        msteams: {
+          appId: "app-id",
+          appPassword: "secret",
+          tenantId: "tenant-id",
+          dmPolicy: "open",
+        },
+      },
+    } as OpenClawConfig;
+
+    const resolveDmPolicy = msteamsPlugin.security?.resolveDmPolicy;
+    expect(resolveDmPolicy).toBeTypeOf("function");
+
+    const openAccount = resolveMSTeamsAccount(cfg);
+    const openPolicy = resolveDmPolicy!({
+      cfg,
+      accountId: openAccount.accountId,
+      account: openAccount,
+    });
+    expect(openPolicy.policy).toBe("open");
+  });
+
+  it("falls back to the pairing default and passes allowFrom through", () => {
+    const cfg = {
+      channels: {
+        msteams: {
+          appId: "app-id",
+          appPassword: "secret",
+          tenantId: "tenant-id",
+          dmPolicy: "allowlist",
+          allowFrom: [" MSTEAMS:user:Bob@Example.com "],
+        },
+      },
+    } as OpenClawConfig;
+
+    const account = resolveMSTeamsAccount(cfg);
+    const policy = msteamsPlugin.security?.resolveDmPolicy?.({
+      cfg,
+      accountId: account.accountId,
+      account,
+    });
+    expect(policy?.policy).toBe("allowlist");
+    expect(policy?.allowFrom).toEqual([" MSTEAMS:user:Bob@Example.com "]);
+    expect(policy?.normalizeEntry?.(" MSTEAMS:user:Bob@Example.com ")).toBe(
+      "msteams:user:bob@example.com",
+    );
+
+    const unsetCfg = createConfiguredMSTeamsCfg();
+    const unsetAccount = resolveMSTeamsAccount(unsetCfg);
+    const unsetPolicy = msteamsPlugin.security?.resolveDmPolicy?.({
+      cfg: unsetCfg,
+      accountId: unsetAccount.accountId,
+      account: unsetAccount,
+    });
+    expect(unsetPolicy?.policy).toBe("pairing");
   });
 });
