@@ -29,7 +29,7 @@ import {
 } from "../infra/net/proxy/proxy-lifecycle.js";
 import { logDebug, logError } from "../logger.js";
 import { redactToolPayloadText } from "../logging/redact.js";
-import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
+import { registerPinnedSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
 import type { DeviceAuthEntry } from "../shared/device-auth.js";
 import { VERSION } from "../version.js";
 
@@ -140,7 +140,7 @@ export class GatewayClient {
       deviceAuthScope && (baseOptions.token?.trim() || baseOptions.password?.trim()),
     );
     for (const value of Object.values(baseOptions.edgeAuthHeaders ?? {})) {
-      registerSecretValueForRedaction(value);
+      registerPinnedSecretValueForRedaction(value);
     }
     this.#client = new BaseGatewayClient({
       ...baseOptions,

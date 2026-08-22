@@ -5,11 +5,17 @@ const MIN_SECRET_VALUE_LENGTH = 6;
 const MAX_SECRET_VALUES = 512;
 
 const registeredValues = new Map<string, true>();
+// Process-lifetime credentials registered at bootstrap (audit identity key,
+// edge-auth headers, provider client secrets) must not be evictable by
+// ephemeral per-transfer tokens, so they live outside the bounded registry.
+const pinnedValues = new Map<string, true>();
 let compiledMatcher: RegExp | undefined;
 let firstChars = new Set<string>();
 
 function rebuildProbe(): void {
-  firstChars = new Set([...registeredValues.keys()].map((value) => value.charAt(0)));
+  firstChars = new Set(
+    [...pinnedValues.keys(), ...registeredValues.keys()].map((value) => value.charAt(0)),
+  );
   compiledMatcher = undefined;
 }
 
@@ -20,6 +26,16 @@ function registerOneSecretValue(value: string): void {
   }
   registeredValues.set(value, true);
   pruneMapToMaxSize(registeredValues, MAX_SECRET_VALUES);
+  rebuildProbe();
+}
+
+function registerOnePinnedSecretValue(value: string): void {
+  // Keep one canonical home so matcher alternation never carries duplicates.
+  registeredValues.delete(value);
+  if (pinnedValues.has(value)) {
+    return;
+  }
+  pinnedValues.set(value, true);
   rebuildProbe();
 }
 
@@ -44,13 +60,34 @@ export function registerSecretValueForRedaction(value: string): void {
   registerOneSecretValue(value);
 }
 
+/**
+ * Registers a process-lifetime credential for exact-value log redaction.
+ * Pinned values are exempt from bounded-registry eviction, so bootstrap
+ * secrets (audit identity key, edge-auth headers, provider client secrets)
+ * stay redacted even after many ephemeral token registrations.
+ */
+export function registerPinnedSecretValueForRedaction(value: string): void {
+  if (value.length < MIN_SECRET_VALUE_LENGTH) {
+    return;
+  }
+  const encoded = encodeURIComponent(value);
+  if (encoded !== value) {
+    registerOnePinnedSecretValue(encoded);
+  }
+  const jsonEscaped = JSON.stringify(value).slice(1, -1);
+  if (jsonEscaped !== value) {
+    registerOnePinnedSecretValue(jsonEscaped);
+  }
+  registerOnePinnedSecretValue(value);
+}
+
 /** Returns whether a value has SecretRef provenance in the process registry. */
 export function isSecretValueRegisteredForRedaction(value: string): boolean {
-  return registeredValues.has(value);
+  return pinnedValues.has(value) || registeredValues.has(value);
 }
 
 export function hasRegisteredSecretValuesForRedaction(): boolean {
-  return registeredValues.size > 0;
+  return pinnedValues.size > 0 || registeredValues.size > 0;
 }
 
 /** Replaces registered exact values while preserving the caller's mask convention. */
@@ -58,7 +95,7 @@ export function redactRegisteredSecretValues(
   text: string,
   mask: (value: string) => string,
 ): string {
-  if (!text || registeredValues.size === 0) {
+  if (!text || (pinnedValues.size === 0 && registeredValues.size === 0)) {
     return text;
   }
   let couldMatch = false;
@@ -72,7 +109,7 @@ export function redactRegisteredSecretValues(
     return text;
   }
   compiledMatcher ??= new RegExp(
-    [...registeredValues.keys()]
+    [...pinnedValues.keys(), ...registeredValues.keys()]
       .toSorted((left, right) => right.length - left.length)
       .map(escapeRegExp)
       .join("|"),
@@ -82,6 +119,7 @@ export function redactRegisteredSecretValues(
 }
 
 function resetSecretRedactionRegistryForTest(): void {
+  pinnedValues.clear();
   registeredValues.clear();
   rebuildProbe();
 }

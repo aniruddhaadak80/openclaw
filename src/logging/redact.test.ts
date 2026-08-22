@@ -18,7 +18,10 @@ import {
   resolveRedactOptions,
 } from "./redact.js";
 import { withFullContextToolPayloadRedaction } from "./redact.test-support.js";
-import { registerSecretValueForRedaction } from "./secret-redaction-registry.js";
+import {
+  registerPinnedSecretValueForRedaction,
+  registerSecretValueForRedaction,
+} from "./secret-redaction-registry.js";
 import { resetSecretRedactionRegistryForTest } from "./secret-redaction-registry.test-support.js";
 
 const defaults = getDefaultRedactPatterns();
@@ -115,6 +118,27 @@ describe("registered exact secret values", () => {
 
     expect(redactSensitiveText(first, { mode: "off" })).not.toContain(first);
     expect(redactSensitiveText(second, { mode: "off" })).toBe(second);
+  });
+
+  it("keeps pinned values redacted after bounded-registry eviction", () => {
+    const pinned = "pinned-bootstrap-secret-value";
+    registerPinnedSecretValueForRedaction(pinned);
+    for (let index = 0; index <= 512; index += 1) {
+      registerSecretValueForRedaction(
+        `exact-registry-pinned-race-${index.toString().padStart(3, "0")}`,
+      );
+    }
+
+    // The pinned bootstrap credential survives the ephemeral churn that evicts
+    // regular registrations; its percent-encoded form stays covered too.
+    expect(redactSensitiveText(`boot ${pinned}`, { mode: "off" })).toBe("boot pinned…alue");
+    const encoded = encodeURIComponent(pinned);
+    expect(redactSensitiveText(`url ${encoded}`, { mode: "off" })).not.toContain(encoded);
+
+    // Ephemeral values registered after the pin still evict each other normally.
+    expect(redactSensitiveText("exact-registry-pinned-race-000", { mode: "off" })).toBe(
+      "exact-registry-pinned-race-000",
+    );
   });
 });
 

@@ -6,7 +6,7 @@ import {
   normalizeSecretInputString,
   type SecretInput,
 } from "../config/types.secrets.js";
-import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
+import { registerPinnedSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
 import { materializeSecretInput } from "../secrets/resolve-secret-input-string.js";
 
 const CF_ACCESS_CLIENT_ID_ENV = "CF_ACCESS_CLIENT_ID";
@@ -100,8 +100,8 @@ export async function resolveNodeHostCloudflareAccess(params: {
   if (!clientId || !clientSecret) {
     throw new Error("node-host Cloudflare Access credentials resolved empty");
   }
-  registerSecretValueForRedaction(clientId);
-  registerSecretValueForRedaction(clientSecret);
+  registerPinnedSecretValueForRedaction(clientId);
+  registerPinnedSecretValueForRedaction(clientSecret);
   return { clientId, clientSecret };
 }
 

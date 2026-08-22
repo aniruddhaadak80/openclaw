@@ -6,7 +6,7 @@ import {
   normalizeSecretInputString,
   type SecretInput,
 } from "../config/types.secrets.js";
-import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
+import { registerPinnedSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
 import { materializeSecretInput } from "../secrets/resolve-secret-input-string.js";
 import { findEdgeAuthIssue } from "../shared/gateway-edge-auth-headers.js";
 
@@ -72,7 +72,7 @@ export async function resolveEdgeAuthHeaders(params: {
       if (!value) {
         throw new Error(`gateway.remote.edgeAuth header "${headerName}" resolved empty`);
       }
-      registerSecretValueForRedaction(value);
+      registerPinnedSecretValueForRedaction(value);
       return [headerName, value] as const;
     }),
   );
