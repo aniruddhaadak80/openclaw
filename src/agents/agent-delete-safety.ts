@@ -25,25 +25,40 @@ export function formatSharedAuthStoreOwnerDeleteError(agentId: string): string {
   return `Agent "${agentId}" owns the legacy shared auth store and cannot be deleted. Run openclaw doctor --fix to migrate shared auth, then retry.`;
 }
 
-function normalizeWorkspacePathForComparison(input: string): string {
+type NormalizedWorkspacePath = {
+  path: string;
+  /** True when realpath failed but the path still exists, so symlink overlap cannot be ruled out. */
+  unverifiable: boolean;
+};
+
+function normalizeWorkspacePathForComparison(input: string): NormalizedWorkspacePath {
   const resolved = path.resolve(input.replaceAll("\0", ""));
   let normalized = resolved;
+  let unverifiable = false;
   try {
     normalized = fs.realpathSync.native(resolved);
   } catch {
-    // Keep lexical path for non-existent directories.
+    // Keep lexical path for non-existent directories. An existing directory whose
+    // realpath cannot be resolved may still reach another workspace through symlinks,
+    // so mark it unverifiable and let the overlap check fail closed rather than
+    // trusting lexical inequality for a live deletion-safety decision.
+    unverifiable = fs.existsSync(resolved);
   }
   if (process.platform === "win32") {
-    return lowercasePreservingWhitespace(normalized);
+    return { path: lowercasePreservingWhitespace(normalized), unverifiable };
   }
-  return normalized;
+  return { path: normalized, unverifiable };
 }
 
 function workspacePathsOverlap(left: string, right: string): boolean {
   const normalizedLeft = normalizeWorkspacePathForComparison(left);
   const normalizedRight = normalizeWorkspacePathForComparison(right);
+  if (normalizedLeft.unverifiable || normalizedRight.unverifiable) {
+    return true;
+  }
   return (
-    isPathInside(normalizedRight, normalizedLeft) || isPathInside(normalizedLeft, normalizedRight)
+    isPathInside(normalizedRight.path, normalizedLeft.path) ||
+    isPathInside(normalizedLeft.path, normalizedRight.path)
   );
 }
 
