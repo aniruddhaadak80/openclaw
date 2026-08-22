@@ -893,6 +893,40 @@ describe("buildAssistantMessage", () => {
     expect(result.usage.totalTokens).toBe(15);
   });
 
+  it("keeps a differing terminal response.model as responseModel", () => {
+    const response = createAssistantResponse(
+      { content: "Hello!" },
+      { model: "qwen3:latest", prompt_eval_count: 3, eval_count: 1 },
+    );
+    const result = buildAssistantMessage(response, {
+      api: "ollama",
+      provider: "ollama",
+      id: "qwen3",
+    });
+    expect(result.model).toBe("qwen3");
+    expect(result.responseModel).toBe("qwen3:latest");
+    expect(result.stopReason).toBe("stop");
+    expect(result.usage.totalTokens).toBe(4);
+  });
+
+  it("omits responseModel when terminal model matches the requested id", () => {
+    const response = createAssistantResponse({ content: "Hello!" }, { model: "qwen3:32b" });
+    const result = buildAssistantMessage(response, modelInfo);
+    expect(result.model).toBe("qwen3:32b");
+    expect(result).not.toHaveProperty("responseModel");
+  });
+
+  it("omits responseModel when the terminal model equals the provider-stripped wire id", () => {
+    const response = createAssistantResponse({ content: "Hello!" }, { model: "kimi-k2.6:cloud" });
+    const result = buildAssistantMessage(response, {
+      api: "ollama",
+      provider: "ollama",
+      id: "ollama/kimi-k2.6:cloud",
+    });
+    expect(result.model).toBe("ollama/kimi-k2.6:cloud");
+    expect(result).not.toHaveProperty("responseModel");
+  });
+
   it("keeps thinking-only output when content is empty", () => {
     const response = createAssistantResponse({ content: "", thinking: "Thinking output" });
     const result = buildAssistantMessage(response, modelInfo);

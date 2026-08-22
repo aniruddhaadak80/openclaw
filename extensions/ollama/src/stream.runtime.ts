@@ -377,6 +377,7 @@ function buildStreamAssistantMessage(params: {
   stopReason: StopReason;
   usage: Usage;
   timestamp?: number;
+  responseModel?: string;
 }): AssistantMessage {
   return {
     role: "assistant",
@@ -385,6 +386,7 @@ function buildStreamAssistantMessage(params: {
     api: params.model.api,
     provider: params.model.provider,
     model: params.model.id,
+    ...(params.responseModel ? { responseModel: params.responseModel } : {}),
     usage: params.usage,
     timestamp: params.timestamp ?? Date.now(),
   };
@@ -865,9 +867,18 @@ export function buildAssistantMessage(
       input: resolveUsageCount(response.prompt_eval_count, usageFallback?.input),
       output: resolveUsageCount(response.eval_count, usageFallback?.output),
     }),
+    // Ollama resolves untagged requested models to the concrete installed tag
+    // (e.g. "qwen3" -> "qwen3:latest"); keep that identity when it differs so
+    // terminal receipts and transcripts do not attribute the run to the alias.
+    // Compare against the wire id actually sent, not the descriptor id, so a
+    // provider-qualified request ("ollama/qwen3") is not misread as a reroute.
+    responseModel:
+      response.model &&
+      response.model !== normalizeOllamaWireModelId(modelInfo.id, modelInfo.provider)
+        ? response.model
+        : undefined,
   });
 }
-
 export async function* parseNdjsonStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
 ): AsyncGenerator<OllamaChatResponse> {
