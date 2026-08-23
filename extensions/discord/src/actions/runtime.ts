@@ -75,7 +75,7 @@ export async function handleDiscordAction(
     return await handleDiscordModerationAction(action, params, isActionEnabled, cfg);
   }
   if (presenceActions.has(action)) {
-    return await handleDiscordPresenceAction(action, params, isActionEnabled);
+    return await handleDiscordPresenceAction(action, params, isActionEnabled, cfg);
   }
   throw new Error(`Unknown action: ${action}`);
 }

@@ -1,6 +1,7 @@
 // Discord plugin module implements runtime.presence behavior.
 import type { AgentToolResult } from "openclaw/plugin-sdk/agent-core";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
+import { resolveDefaultDiscordAccountId } from "../accounts.js";
 import type { Activity, UpdatePresenceData } from "../internal/gateway.js";
 import { getGateway } from "../monitor/gateway-registry.js";
 import {
@@ -8,6 +9,7 @@ import {
   jsonResult,
   readStringParam,
   type DiscordActionConfig,
+  type OpenClawConfig,
 } from "../runtime-api.js";
 
 const ACTIVITY_TYPE_MAP: Record<string, number> = {
@@ -25,6 +27,7 @@ export async function handleDiscordPresenceAction(
   action: string,
   params: Record<string, unknown>,
   isActionEnabled: ActionGate<DiscordActionConfig>,
+  cfg: OpenClawConfig,
 ): Promise<AgentToolResult<unknown>> {
   if (action !== "setPresence") {
     throw new Error(`Unknown presence action: ${action}`);
@@ -34,7 +37,10 @@ export async function handleDiscordPresenceAction(
     throw new Error("Discord presence changes are disabled.");
   }
 
-  const accountId = readStringParam(params, "accountId");
+  // Production gateways register under concrete normalized account ids, so an
+  // omitted accountId must resolve through the configured default (matching
+  // messaging/guild actions) instead of the registry's omitted-id sentinel.
+  const accountId = readStringParam(params, "accountId") ?? resolveDefaultDiscordAccountId(cfg);
   const gateway = getGateway(accountId);
   if (!gateway) {
     throw new Error(

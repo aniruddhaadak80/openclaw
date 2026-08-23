@@ -1,8 +1,8 @@
 // Discord tests cover runtime.presence plugin behavior.
-import type { DiscordActionConfig } from "openclaw/plugin-sdk/config-contracts";
+import type { DiscordActionConfig, OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GatewayPlugin } from "../internal/gateway.js";
-import { clearGateways, registerGateway } from "../monitor/gateway-registry.js";
+import { clearGateways, getGateway, registerGateway } from "../monitor/gateway-registry.js";
 import type { ActionGate } from "../runtime-api.js";
 import { handleDiscordPresenceAction } from "./runtime.presence.js";
 
@@ -14,19 +14,22 @@ function createMockGateway(connected = true): GatewayPlugin {
 
 const presenceEnabled: ActionGate<DiscordActionConfig> = (key) => key === "presence";
 const presenceDisabled: ActionGate<DiscordActionConfig> = () => false;
+const discordCfg = { channels: { discord: {} } } as OpenClawConfig;
 
 describe("handleDiscordPresenceAction", () => {
   async function setPresence(
     params: Record<string, unknown>,
     actionGate: ActionGate<DiscordActionConfig> = presenceEnabled,
   ) {
-    return await handleDiscordPresenceAction("setPresence", params, actionGate);
+    return await handleDiscordPresenceAction("setPresence", params, actionGate, discordCfg);
   }
 
   beforeEach(() => {
     mockUpdatePresence.mockClear();
     clearGateways();
-    registerGateway(undefined, createMockGateway());
+    // Production registers gateways under concrete normalized account ids;
+    // registering under "default" mirrors runDiscordGatewayLifecycle.
+    registerGateway("default", createMockGateway());
   });
 
   it("sets playing activity", async () => {
@@ -34,6 +37,7 @@ describe("handleDiscordPresenceAction", () => {
       "setPresence",
       { activityType: "playing", activityName: "with fire", status: "online" },
       presenceEnabled,
+      discordCfg,
     );
     expect(mockUpdatePresence).toHaveBeenCalledWith({
       since: null,
@@ -47,6 +51,30 @@ describe("handleDiscordPresenceAction", () => {
     );
     expect(payload.ok).toBe(true);
     expect(payload.activities[0]).toEqual({ type: 0, name: "with fire" });
+  });
+
+  it("resolves an omitted accountId to the configured default account", async () => {
+    await setPresence({ status: "online" });
+    expect(getGateway("default")).toBeDefined();
+    expect(mockUpdatePresence).toHaveBeenCalled();
+  });
+
+  it("resolves the configured defaultAccount when accountId is omitted", async () => {
+    clearGateways();
+    registerGateway("ops-bot", createMockGateway());
+    const cfg = {
+      channels: {
+        discord: {
+          defaultAccount: "ops-bot",
+          accounts: { "ops-bot": {} },
+        },
+      },
+    } as OpenClawConfig;
+
+    await handleDiscordPresenceAction("setPresence", { status: "idle" }, presenceEnabled, cfg);
+
+    expect(getGateway("default")).toBeUndefined();
+    expect(mockUpdatePresence).toHaveBeenCalled();
   });
 
   it.each([
@@ -141,7 +169,7 @@ describe("handleDiscordPresenceAction", () => {
 
   it("errors when gateway is not connected", async () => {
     clearGateways();
-    registerGateway(undefined, createMockGateway(false));
+    registerGateway("default", createMockGateway(false));
     await expect(setPresence({ status: "dnd" })).rejects.toThrow(/not connected/);
   });
 
@@ -159,8 +187,8 @@ describe("handleDiscordPresenceAction", () => {
   });
 
   it("rejects unknown presence actions", async () => {
-    await expect(handleDiscordPresenceAction("unknownAction", {}, presenceEnabled)).rejects.toThrow(
-      /Unknown presence action/,
-    );
+    await expect(
+      handleDiscordPresenceAction("unknownAction", {}, presenceEnabled, discordCfg),
+    ).rejects.toThrow(/Unknown presence action/);
   });
 });
