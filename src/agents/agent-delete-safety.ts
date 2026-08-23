@@ -27,7 +27,7 @@ export function formatSharedAuthStoreOwnerDeleteError(agentId: string): string {
 
 type NormalizedWorkspacePath = {
   path: string;
-  /** True when realpath failed but the path still exists, so symlink overlap cannot be ruled out. */
+  /** True when realpath failed for any reason other than a missing path. */
   unverifiable: boolean;
 };
 
@@ -37,12 +37,16 @@ function normalizeWorkspacePathForComparison(input: string): NormalizedWorkspace
   let unverifiable = false;
   try {
     normalized = fs.realpathSync.native(resolved);
-  } catch {
-    // Keep lexical path for non-existent directories. An existing directory whose
-    // realpath cannot be resolved may still reach another workspace through symlinks,
-    // so mark it unverifiable and let the overlap check fail closed rather than
-    // trusting lexical inequality for a live deletion-safety decision.
-    unverifiable = fs.existsSync(resolved);
+  } catch (error) {
+    // Only a definitively missing path is safe for lexical comparison: a
+    // workspace that cannot be resolved because of access, loop, or other
+    // filesystem errors may still reach another workspace through symlinks,
+    // so the overlap check must fail closed instead of trusting lexical
+    // inequality for a live deletion-safety decision.
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    if (code !== "ENOENT" && code !== "ENOTDIR") {
+      unverifiable = true;
+    }
   }
   if (process.platform === "win32") {
     return { path: lowercasePreservingWhitespace(normalized), unverifiable };

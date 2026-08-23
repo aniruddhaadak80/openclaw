@@ -34,12 +34,21 @@ describe("shared auth store deletion safety", () => {
 });
 
 describe("findOverlappingWorkspaceAgentIds", () => {
+  const tempRoots: string[] = [];
+
   afterEach(() => {
     vi.restoreAllMocks();
+    while (tempRoots.length > 0) {
+      const root = tempRoots.pop();
+      if (root) {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
   });
 
   function makeTempWorkspace(name: string): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
+    tempRoots.push(root);
     return fs.realpathSync.native(root);
   }
 
@@ -67,25 +76,47 @@ describe("findOverlappingWorkspaceAgentIds", () => {
     expect(findOverlappingWorkspaceAgentIds(cfg, "beta", link)).toEqual(["alpha"]);
   });
 
+  function mockRealpathError(code: string): void {
+    vi.spyOn(fs.realpathSync, "native").mockImplementation(() => {
+      throw Object.assign(new Error(`simulated realpath failure (${code})`), { code });
+    });
+  }
+
   it("reports overlap when an existing workspace path cannot be realpath-resolved", () => {
     const alpha = makeTempWorkspace("delete-safety-alpha");
     const beta = makeTempWorkspace("delete-safety-beta");
     const cfg = configWithWorkspaces({ alpha, beta });
 
-    vi.spyOn(fs.realpathSync, "native").mockImplementation(() => {
-      throw new Error("simulated transient realpath failure");
-    });
+    mockRealpathError("EACCES");
 
     // Both directories exist but their symlink relationship can no longer be
     // proven; deletion must fail closed instead of trusting lexical inequality.
     expect(findOverlappingWorkspaceAgentIds(cfg, "beta", beta)).toEqual(["alpha"]);
   });
 
-  it("keeps lexical comparison for non-existent workspace directories", () => {
-    const missingLeft = path.join(makeTempWorkspace("delete-safety-miss-a"), "gone-left");
-    const missingRight = path.join(makeTempWorkspace("delete-safety-miss-b"), "gone-right");
-    const cfg = configWithWorkspaces({ alpha: missingLeft, beta: missingRight });
+  it("fails closed for symlink-loop and other non-missing realpath errors", () => {
+    const alpha = makeTempWorkspace("delete-safety-loop-a");
+    const beta = makeTempWorkspace("delete-safety-loop-b");
+    const cfg = configWithWorkspaces({ alpha, beta });
 
-    expect(findOverlappingWorkspaceAgentIds(cfg, "beta", missingRight)).toEqual([]);
+    for (const code of ["ELOOP", "EPERM", "EIO"]) {
+      mockRealpathError(code);
+      expect(findOverlappingWorkspaceAgentIds(cfg, "beta", beta)).toEqual(["alpha"]);
+    }
+  });
+
+  it("keeps lexical comparison only for missing-path realpath errors", () => {
+    const left = makeTempWorkspace("delete-safety-miss-a");
+    const right = makeTempWorkspace("delete-safety-miss-b");
+    const missingLeft = path.join(makeTempWorkspace("delete-safety-gone-a"), "gone-left");
+    const missingRight = path.join(makeTempWorkspace("delete-safety-gone-b"), "gone-right");
+    const cfg = configWithWorkspaces({ alpha: left, beta: right });
+    const goneCfg = configWithWorkspaces({ alpha: missingLeft, beta: missingRight });
+
+    mockRealpathError("ENOENT");
+    expect(findOverlappingWorkspaceAgentIds(cfg, "beta", right)).toEqual([]);
+
+    // Genuinely absent directories keep the pre-existing lexical comparison too.
+    expect(findOverlappingWorkspaceAgentIds(goneCfg, "beta", missingRight)).toEqual([]);
   });
 });
