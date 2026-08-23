@@ -821,6 +821,23 @@ function extractOllamaTools(tools: Tool[] | undefined): OllamaTool[] {
   return result;
 }
 
+/**
+ * Resolves the concrete terminal model identity for receipt metadata.
+ * Terminal records come from parsed NDJSON, so the value is coerced to a
+ * non-empty trimmed string first; blank or non-string models resolve to
+ * undefined so malformed records cannot enter persisted metadata.
+ */
+function resolveOllamaTerminalResponseModel(
+  terminalModel: unknown,
+  modelInfo: StreamModelDescriptor,
+): string | undefined {
+  const normalized = typeof terminalModel === "string" ? terminalModel.trim() : "";
+  if (!normalized || normalized === normalizeOllamaWireModelId(modelInfo.id, modelInfo.provider)) {
+    return undefined;
+  }
+  return normalized;
+}
+
 export function buildAssistantMessage(
   response: OllamaChatResponse,
   modelInfo: StreamModelDescriptor,
@@ -872,11 +889,9 @@ export function buildAssistantMessage(
     // terminal receipts and transcripts do not attribute the run to the alias.
     // Compare against the wire id actually sent, not the descriptor id, so a
     // provider-qualified request ("ollama/qwen3") is not misread as a reroute.
-    responseModel:
-      response.model &&
-      response.model !== normalizeOllamaWireModelId(modelInfo.id, modelInfo.provider)
-        ? response.model
-        : undefined,
+    // Terminal records come from parsed NDJSON, so coerce before copying: a
+    // non-string or blank model must never enter receipt/transcript metadata.
+    responseModel: resolveOllamaTerminalResponseModel(response.model, modelInfo),
   });
 }
 export async function* parseNdjsonStream(

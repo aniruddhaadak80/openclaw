@@ -927,6 +927,32 @@ describe("buildAssistantMessage", () => {
     expect(result).not.toHaveProperty("responseModel");
   });
 
+  it.each([
+    { name: "blank", model: "   " },
+    { name: "non-string", model: 42 },
+    { name: "null", model: null },
+  ])("omits responseModel for a $name terminal model", ({ model }) => {
+    const response = createAssistantResponse({ content: "Hello!" }, { model } as unknown as Partial<
+      Omit<AssistantResponse, "message">
+    >);
+    const result = buildAssistantMessage(response, modelInfo);
+    expect(result.model).toBe("qwen3:32b");
+    expect(result).not.toHaveProperty("responseModel");
+  });
+
+  it("trims surrounding whitespace from a differing terminal model", () => {
+    const response = createAssistantResponse(
+      { content: "Hello!" },
+      { model: "  qwen3:latest  ", prompt_eval_count: 3, eval_count: 1 },
+    );
+    const result = buildAssistantMessage(response, {
+      api: "ollama",
+      provider: "ollama",
+      id: "qwen3",
+    });
+    expect(result.responseModel).toBe("qwen3:latest");
+  });
+
   it("keeps thinking-only output when content is empty", () => {
     const response = createAssistantResponse({ content: "", thinking: "Thinking output" });
     const result = buildAssistantMessage(response, modelInfo);
