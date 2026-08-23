@@ -2468,9 +2468,9 @@ describe("feishuPlugin security", () => {
     const resolveDmPolicy = feishuPlugin.security?.resolveDmPolicy;
     expect(resolveDmPolicy).toBeTypeOf("function");
     const policy = resolveDmPolicy!({ cfg, accountId: "default", account });
-    expect(policy.policy).toBe("open");
-    expect(policy.allowFrom).toEqual([" ou_Bob "]);
-    expect(policy.normalizeEntry?.(" OU_X ")).toBe("ou_x");
+    expect(policy?.policy).toBe("open");
+    expect(policy?.allowFrom).toEqual([" ou_Bob "]);
+    expect(policy?.normalizeEntry?.(" OU_X ")).toBe("ou_x");
   });
 
   it("falls back to the pairing default when no DM policy is configured", () => {

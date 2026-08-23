@@ -490,7 +490,7 @@ describe("msteamsPlugin security", () => {
       accountId: openAccount.accountId,
       account: openAccount,
     });
-    expect(openPolicy.policy).toBe("open");
+    expect(openPolicy?.policy).toBe("open");
   });
 
   it("falls back to the pairing default and passes allowFrom through", () => {
