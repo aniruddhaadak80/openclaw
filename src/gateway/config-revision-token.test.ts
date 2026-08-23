@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import { assertSqliteSchemaContains } from "../infra/sqlite-schema-contract.js";
+import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
+import { redactRegisteredSecretValues } from "../logging/secret-redaction-registry.js";
+import { resetSecretRedactionRegistryForTest } from "../logging/secret-redaction-registry.test-support.js";
 import { tableExists } from "../state/openclaw-state-db-schema-helpers.js";
 import {
   closeOpenClawStateDatabaseForTest,
@@ -78,5 +81,32 @@ describe("Gateway config revision tokens", () => {
         .prepare("SELECT length(hmac_key) AS size FROM config_revision_keys WHERE id = 1")
         .get(),
     ).toEqual({ size: 31 });
+  });
+
+  it("keeps the durable key masked after bounded-registry eviction churn", () => {
+    const options = stateOptions();
+    const database = openOpenClawStateDatabase(options).db;
+    const projector = loadGatewayConfigRevisionProjector(options);
+    expect(projector.projectRawHash("churn-hash").startsWith("hmac-sha256:v1:")).toBe(true);
+    const keyRow = database
+      .prepare("SELECT hmac_key FROM config_revision_keys WHERE id = 1")
+      .get() as { hmac_key: Uint8Array };
+    const hexForm = Buffer.from(keyRow.hmac_key).toString("hex");
+    const base64Form = Buffer.from(keyRow.hmac_key).toString("base64url");
+
+    // Ephemeral per-transfer style registrations must evict each other, never
+    // the durable config-revision key registered by the owner boundary above.
+    for (let index = 0; index < 600; index += 1) {
+      registerSecretValueForRedaction(`transient-churn-token-${index.toString().padStart(4, "0")}`);
+    }
+
+    const output = redactRegisteredSecretValues(
+      `key hex ${hexForm} b64 ${base64Form}`,
+      () => "***",
+    );
+    expect(output).not.toContain(hexForm);
+    expect(output).not.toContain(base64Form);
+
+    resetSecretRedactionRegistryForTest();
   });
 });

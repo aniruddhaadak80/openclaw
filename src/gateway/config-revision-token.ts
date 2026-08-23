@@ -5,7 +5,7 @@ import {
   executeSqliteQueryTakeFirstSync,
   getNodeSqliteKysely,
 } from "../infra/kysely-sync.js";
-import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
+import { registerPinnedSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
 import { ensureConfigRevisionKeySchema } from "../state/openclaw-state-db-schema-additive.js";
 import type { DB as OpenClawStateKyselyDatabase } from "../state/openclaw-state-db.generated.js";
 import {
@@ -31,8 +31,10 @@ const CONFIG_REVISION_RESOLVED_DOMAIN = "openclaw.gateway.config-revision.resolv
 
 function registerConfigRevisionKeyForRedaction(key: Uint8Array): void {
   const bytes = Buffer.from(key);
-  registerSecretValueForRedaction(bytes.toString("hex"));
-  registerSecretValueForRedaction(bytes.toString("base64url"));
+  // Durable installation key: pin both encoded forms so bounded-registry
+  // eviction by ephemeral tokens can never unmask public revision tokens.
+  registerPinnedSecretValueForRedaction(bytes.toString("hex"));
+  registerPinnedSecretValueForRedaction(bytes.toString("base64url"));
 }
 
 function parseConfigRevisionKey(row: ConfigRevisionKeyRow): Uint8Array {
