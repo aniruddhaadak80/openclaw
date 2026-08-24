@@ -26,6 +26,55 @@ export function avoidTrailingHighSurrogateBreak(text: string, start: number, end
   return adjusted > start ? adjusted : end + 1;
 }
 
+let graphemeSegmenter: Intl.Segmenter | undefined;
+
+function getGraphemeSegmenter(): Intl.Segmenter | undefined {
+  try {
+    graphemeSegmenter ??=
+      typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+        ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+        : undefined;
+  } catch {
+    graphemeSegmenter = undefined;
+  }
+  return graphemeSegmenter;
+}
+
+/**
+ * Moves a proposed UTF-16 cut backward to an extended grapheme cluster
+ * boundary so multi-code-unit symbols (ZWJ emoji, flags, skin-tone modifiers,
+ * combining sequences, Indic clusters) stay whole across chunk boundaries.
+ * Falls back to the surrogate-pair clamp when Intl.Segmenter is unavailable.
+ */
+export function avoidTrailingGraphemeBreak(text: string, start: number, end: number): number {
+  const surrogateSafeEnd = avoidTrailingHighSurrogateBreak(text, start, end);
+  if (surrogateSafeEnd <= start || surrogateSafeEnd >= text.length) {
+    return surrogateSafeEnd;
+  }
+  const segmenter = getGraphemeSegmenter();
+  if (!segmenter) {
+    return surrogateSafeEnd;
+  }
+  for (const segment of segmenter.segment(text)) {
+    const segmentEnd = segment.index + segment.segment.length;
+    if (segmentEnd < surrogateSafeEnd) {
+      continue;
+    }
+    if (segment.index < surrogateSafeEnd && segmentEnd > surrogateSafeEnd) {
+      // Cut strictly inside this cluster. Move back to its start so the symbol
+      // stays whole; when the cluster already begins at/after the window start,
+      // emit it whole by extending forward instead (mirrors the surrogate
+      // helper's forward escape) so chunking still makes progress.
+      if (segment.index > start) {
+        return segment.index;
+      }
+      return Math.min(segmentEnd, text.length);
+    }
+    return surrogateSafeEnd;
+  }
+  return surrogateSafeEnd;
+}
+
 /** Slices a UTF-16 string without returning dangling surrogate halves at either edge. */
 export function sliceUtf16Safe(input: string, start: number, end?: number): string {
   const len = input.length;

@@ -58,7 +58,11 @@ export function normalizeE164(number: string): string {
 // Surrogate-safe slicing helpers live in a node-free leaf module so browser/UI
 // bundles can import them without pulling in filesystem code. Re-exported here
 // to preserve the historical `utils.ts` import surface.
-export { sliceUtf16Safe, truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
+export {
+  avoidTrailingGraphemeBreak,
+  sliceUtf16Safe,
+  truncateUtf16Safe,
+} from "@openclaw/normalization-core/utf16-slice";
 
 /** Resolves the OpenClaw config directory from state/config env overrides or home. */
 export function resolveConfigDir(

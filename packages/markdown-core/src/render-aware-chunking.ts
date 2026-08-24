@@ -1,5 +1,5 @@
-import { resolveIntegerOption } from "@openclaw/normalization-core/number-coercion";
-import { avoidTrailingHighSurrogateBreak } from "./chunk-text.js";
+﻿import { resolveIntegerOption } from "@openclaw/normalization-core/number-coercion";
+import { avoidTrailingGraphemeBreak } from "@openclaw/normalization-core/utf16-slice";
 // Markdown Core module implements render aware chunking behavior.
 import { annotateAssistantTranscriptRoleMessageBoundary } from "./ir-annotations.js";
 import {
@@ -152,7 +152,7 @@ function findLargestChunkTextLengthWithinRenderedLimit<TRendered>(
   // Rendered length is not guaranteed to be monotonic after escaping/link or
   // file-reference rewriting, so test exact candidates from longest to shortest.
   for (let candidateLength = currentTextLength - 1; candidateLength >= 1; candidateLength -= 1) {
-    const safeCandidateLength = avoidTrailingHighSurrogateBreak(chunk.text, 0, candidateLength);
+    const safeCandidateLength = avoidTrailingGraphemeBreak(chunk.text, 0, candidateLength);
     const candidate = sliceMarkdownIR(chunk, 0, safeCandidateLength);
     const rendered = options.renderChunk(candidate);
     if (options.measureRendered(rendered) <= renderedLimit) {
@@ -241,7 +241,7 @@ function findMarkdownIRPreservedSplitIndex(text: string, start: number, limit: n
   if (lastAnyWhitespaceBreak > start) {
     return resolveWhitespaceBreak(lastAnyWhitespaceBreak, lastAnyWhitespaceRunStart);
   }
-  return avoidTrailingHighSurrogateBreak(text, start, maxEnd);
+  return avoidTrailingGraphemeBreak(text, start, maxEnd);
 }
 
 function splitMarkdownIRPreserveWhitespace(ir: MarkdownIR, limit: number): MarkdownIR[] {

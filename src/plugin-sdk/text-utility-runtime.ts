@@ -42,6 +42,7 @@ export async function runChannelProbe<
 }
 
 export {
+  avoidTrailingGraphemeBreak,
   CONFIG_DIR,
   clamp,
   clampInt,

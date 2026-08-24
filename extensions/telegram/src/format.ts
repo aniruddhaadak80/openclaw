@@ -1,5 +1,6 @@
-import type { MarkdownTableMode } from "openclaw/plugin-sdk/config-contracts";
 // Telegram helper module supports format behavior.
+import { avoidTrailingGraphemeBreak } from "@openclaw/normalization-core/utf16-slice";
+import type { MarkdownTableMode } from "openclaw/plugin-sdk/config-contracts";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
   FILE_REF_EXTENSIONS_WITH_TLD,
@@ -686,6 +687,13 @@ function clampToSurrogateBoundary(text: string, index: number): number {
   return index > 1 ? index - 1 : index + 1;
 }
 
+// HTML-safe splits must additionally keep extended grapheme clusters whole:
+// ZWJ emoji, flags, and combining sequences span multiple code points and a
+// mid-cluster cut re-encodes to broken replacement glyphs on both sides.
+function clampToGraphemeBoundary(text: string, index: number): number {
+  return avoidTrailingGraphemeBreak(text, 0, index);
+}
+
 // Prefer a word/paragraph boundary inside the entity-safe window so long text
 // runs break between words instead of mid-word. Whitespace never falls inside
 // an HTML entity, so this keeps entities intact; the caller falls back to the
@@ -712,7 +720,7 @@ function findTelegramHtmlSafeSplitIndex(text: string, maxLength: number): number
   const entitySafeIndex = findTelegramHtmlEntitySafeSplitIndex(text, normalizedMaxLength);
   const wordSafeIndex = findTelegramHtmlWordSafeSplitIndex(text, entitySafeIndex);
   const splitIndex = wordSafeIndex > 0 ? wordSafeIndex : entitySafeIndex;
-  return clampToSurrogateBoundary(text, splitIndex);
+  return clampToGraphemeBoundary(text, clampToSurrogateBoundary(text, splitIndex));
 }
 
 function findTelegramHtmlEntitySafeSplitIndex(text: string, normalizedMaxLength: number): number {

@@ -27,7 +27,10 @@ import {
   normalizeOptionalString as normalizeSlackApiString,
   normalizeTrimmedStringList,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
-import { sliceUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
+import {
+  avoidTrailingGraphemeBreak,
+  sliceUtf16Safe,
+} from "openclaw/plugin-sdk/text-utility-runtime";
 import type { SlackTokenSource } from "./accounts.js";
 import { resolveSlackAccount, resolveSlackOperationToken } from "./accounts.js";
 import type { SlackAuthoredTextPlacement } from "./authored-text.js";
@@ -476,7 +479,10 @@ function resolveSlackTextChunks(params: {
     const chunks: string[] = [];
     let remaining = text;
     while (remaining) {
-      const chunk = sliceUtf16Safe(remaining, 0, chunkLimit) || Array.from(remaining)[0] || "";
+      // Grapheme-aware hard cut: keep ZWJ emoji/flags/combining sequences whole
+      // across Slack message boundaries instead of splitting the cluster.
+      const safeEnd = avoidTrailingGraphemeBreak(remaining, 0, chunkLimit);
+      const chunk = remaining.slice(0, safeEnd) || Array.from(remaining)[0] || "";
       chunks.push(chunk);
       remaining = remaining.slice(chunk.length);
     }
