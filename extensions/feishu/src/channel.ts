@@ -89,7 +89,7 @@ import { feishuDoctor } from "./doctor.js";
 import { chunkFeishuMarkdown } from "./markdown.js";
 import { messageActionTargetAliases } from "./message-action-contract.js";
 import { readNativeFeishuCardJson } from "./native-card.js";
-import { resolveFeishuGroupToolPolicy } from "./policy.js";
+import { normalizeFeishuAllowEntry, resolveFeishuGroupToolPolicy } from "./policy.js";
 import {
   assertFeishuCardWithinEnvelope,
   buildFeishuPresentationCard,
@@ -1822,7 +1822,10 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount, FeishuProbeResul
         resolvePolicy: (account) => account.config?.dmPolicy,
         resolveAllowFrom: (account) => account.config?.allowFrom,
         allowFromPathSuffix: "",
-        normalizeEntry: (raw) => raw.trim().toLowerCase(),
+        // Canonical runtime identity form: provider prefixes stripped, typed
+        // prefixes preserved, wildcards kept as "*", so audit wildcard and
+        // route analysis matches runtime DM admission instead of diverging.
+        normalizeEntry: normalizeFeishuAllowEntry,
       },
       collectWarnings: ({ cfg, accountId }) => collectFeishuOpenGroupFindings({ cfg, accountId }),
       collectAuditFindings: ({ cfg }) => collectFeishuSecurityAuditFindings({ cfg }),

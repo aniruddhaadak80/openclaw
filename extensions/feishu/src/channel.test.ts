@@ -2457,20 +2457,39 @@ describe("feishuPlugin security", () => {
         feishu: {
           enabled: true,
           dmPolicy: "open",
+          allowFrom: [" ou_bob123 ", "feishu:user:ou_alice9", "*"],
         },
       },
     } as OpenClawConfig;
     const account = {
       accountId: "default",
-      config: { dmPolicy: "open", allowFrom: [" ou_Bob "] },
+      config: { dmPolicy: "open", allowFrom: [" ou_bob123 ", "feishu:user:ou_alice9", "*"] },
     } as never;
 
     const resolveDmPolicy = feishuPlugin.security?.resolveDmPolicy;
     expect(resolveDmPolicy).toBeTypeOf("function");
     const policy = resolveDmPolicy!({ cfg, accountId: "default", account });
     expect(policy?.policy).toBe("open");
-    expect(policy?.allowFrom).toEqual([" ou_Bob "]);
-    expect(policy?.normalizeEntry?.(" OU_X ")).toBe("ou_x");
+    expect(policy?.allowFrom).toEqual([" ou_bob123 ", "feishu:user:ou_alice9", "*"]);
+  });
+
+  it("normalizes DM allowlist entries with the runtime canonical identity form", () => {
+    const cfg = { channels: { feishu: { enabled: true } } } as OpenClawConfig;
+    const account = { accountId: "default", config: {} };
+
+    const normalizeEntry = feishuPlugin.security?.resolveDmPolicy?.({
+      cfg,
+      accountId: "default",
+      account,
+    })?.normalizeEntry;
+    expect(normalizeEntry).toBeTypeOf("function");
+
+    // Bare open-id entries canonicalize to the typed runtime form.
+    expect(normalizeEntry?.(" ou_bob123 ")).toBe("user:ou_bob123");
+    // Provider-prefixed typed-user entries strip to the same runtime form.
+    expect(normalizeEntry?.("feishu:user:ou_alice9")).toBe("user:ou_alice9");
+    // Wildcards survive so audit open-policy route analysis matches runtime.
+    expect(normalizeEntry?.("*")).toBe("*");
   });
 
   it("falls back to the pairing default when no DM policy is configured", () => {
