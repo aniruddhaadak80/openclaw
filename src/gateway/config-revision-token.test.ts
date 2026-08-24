@@ -3,8 +3,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import { assertSqliteSchemaContains } from "../infra/sqlite-schema-contract.js";
-import { registerSecretValueForRedaction } from "../logging/secret-redaction-registry.js";
-import { redactRegisteredSecretValues } from "../logging/secret-redaction-registry.js";
+import {
+  redactRegisteredSecretValues,
+  registerSecretValueForRedaction,
+} from "../logging/secret-redaction-registry.js";
 import { resetSecretRedactionRegistryForTest } from "../logging/secret-redaction-registry.test-support.js";
 import { tableExists } from "../state/openclaw-state-db-schema-helpers.js";
 import {
