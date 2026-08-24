@@ -28,6 +28,9 @@ function shouldIgnoreInstalledPluginDirName(name: string): boolean {
   if (normalized.includes(".backup-")) {
     return true;
   }
+  // Operator-disabled/backup copies carry the ".disabled" marker (often with a
+  // date suffix). Install-path validation reserves the token in plugin ids, so
+  // anything matching here is operator-managed, not a live install root.
   if (normalized.includes(".disabled")) {
     return true;
   }

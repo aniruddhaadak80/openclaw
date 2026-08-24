@@ -44,6 +44,14 @@ export function validatePluginId(pluginId: string): string | null {
   if (segments.some((segment) => segment === "." || segment === "..")) {
     return "invalid plugin name: reserved path segment";
   }
+  // ".disabled" is the operator convention for disabled/backup plugin copies
+  // (e.g. "telegram.disabled.20260222"); discovery and installed-plugin
+  // security-root enumeration suppress any path containing it. Reserving the
+  // token here keeps that convention unambiguous: an install whose directory
+  // would be suppressed by the disable marker cannot be created silently.
+  if (trimmed.includes(".disabled")) {
+    return "invalid plugin name: reserved disabled marker";
+  }
   if (segments.length === 1) {
     if (trimmed.startsWith("@")) {
       return "invalid plugin name: scoped ids must use @scope/name format";

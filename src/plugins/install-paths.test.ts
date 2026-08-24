@@ -7,6 +7,7 @@ import {
   resolveDefaultPluginNpmDir,
   resolvePluginNpmGenerationProjectDir,
   resolvePluginNpmGenerationProjectDirPrefix,
+  validatePluginId,
 } from "./install-paths.js";
 import { resolvePluginInstallRoots, withPluginInstallRoots } from "./install-root-context.js";
 import {
@@ -115,5 +116,22 @@ describe("managed npm plugin install paths", () => {
     expect(path.basename(projectDir)).toMatch(
       new RegExp(`^${resolvePluginNpmGenerationProjectDirPrefix(packageName)}`, "u"),
     );
+  });
+});
+
+describe("validatePluginId", () => {
+  it("accepts ordinary unscoped and scoped ids", () => {
+    expect(validatePluginId("telegram")).toBeNull();
+    expect(validatePluginId("@openclaw/codex")).toBeNull();
+  });
+
+  it("rejects ids carrying the reserved disabled marker (#127391)", () => {
+    // Discovery and installed-plugin security roots suppress any path
+    // containing ".disabled" so operator-disabled/backup copies stay hidden;
+    // such ids must fail loudly at the install boundary instead of being
+    // installed and then silently invisible.
+    expect(validatePluginId("valid.disabled-name")).toMatch(/reserved disabled marker/u);
+    expect(validatePluginId("telegram.disabled.20260222")).toMatch(/reserved disabled marker/u);
+    expect(validatePluginId("@scope/name.disabled")).toMatch(/reserved disabled marker/u);
   });
 });
