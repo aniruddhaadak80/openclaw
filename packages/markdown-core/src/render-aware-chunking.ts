@@ -1,4 +1,4 @@
-﻿import { resolveIntegerOption } from "@openclaw/normalization-core/number-coercion";
+import { resolveIntegerOption } from "@openclaw/normalization-core/number-coercion";
 import { avoidTrailingGraphemeBreak } from "@openclaw/normalization-core/utf16-slice";
 // Markdown Core module implements render aware chunking behavior.
 import { annotateAssistantTranscriptRoleMessageBoundary } from "./ir-annotations.js";

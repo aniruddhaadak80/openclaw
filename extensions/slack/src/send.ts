@@ -27,10 +27,7 @@ import {
   normalizeOptionalString as normalizeSlackApiString,
   normalizeTrimmedStringList,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
-import {
-  avoidTrailingGraphemeBreak,
-  sliceUtf16Safe,
-} from "openclaw/plugin-sdk/text-utility-runtime";
+import { avoidTrailingGraphemeBreak } from "openclaw/plugin-sdk/text-utility-runtime";
 import type { SlackTokenSource } from "./accounts.js";
 import { resolveSlackAccount, resolveSlackOperationToken } from "./accounts.js";
 import type { SlackAuthoredTextPlacement } from "./authored-text.js";
