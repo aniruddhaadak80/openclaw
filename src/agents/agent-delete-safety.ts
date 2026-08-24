@@ -43,6 +43,7 @@ function normalizeWorkspacePathForComparison(input: string): NormalizedWorkspace
     // filesystem errors may still reach another workspace through symlinks,
     // so the overlap check must fail closed instead of trusting lexical
     // inequality for a live deletion-safety decision.
+    // SAFETY: filesystem errors carry a string errno code; read-only narrowing.
     const code = (error as NodeJS.ErrnoException | null)?.code;
     if (code !== "ENOENT" && code !== "ENOTDIR") {
       unverifiable = true;
