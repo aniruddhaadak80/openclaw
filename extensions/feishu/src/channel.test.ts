@@ -2475,7 +2475,7 @@ describe("feishuPlugin security", () => {
 
   it("normalizes DM allowlist entries with the runtime canonical identity form", () => {
     const cfg = { channels: { feishu: { enabled: true } } } as OpenClawConfig;
-    const account = { accountId: "default", config: {} };
+    const account = { accountId: "default", config: {} } as never;
 
     const normalizeEntry = feishuPlugin.security?.resolveDmPolicy?.({
       cfg,
