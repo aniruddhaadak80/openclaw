@@ -16,6 +16,10 @@ import {
 
 describe("plugin install root context", () => {
   it("keeps discovery roots on the operator install while runtime state is redirected", async () => {
+    // resolveUserPath resolves configured roots through path.resolve, so the
+    // expected shapes must be derived platform-aware instead of POSIX literals.
+    const operatorStateDir = path.resolve("/operator/openclaw");
+    const ephemeralStateDir = path.resolve("/tmp/ephemeral-run");
     const operatorRoots = resolvePluginInstallRoots(
       { OPENCLAW_STATE_DIR: "/operator/openclaw" },
       () => "/unused-home",
@@ -25,27 +29,29 @@ describe("plugin install root context", () => {
     await withPluginInstallRoots(operatorRoots, async () => {
       await Promise.resolve();
       expect(resolveDefaultPluginExtensionsDir(redirectedEnv)).toBe(
-        "/operator/openclaw/extensions",
+        path.join(operatorStateDir, "extensions"),
       );
-      expect(resolveDefaultPluginNpmDir(redirectedEnv)).toBe("/operator/openclaw/npm");
-      expect(resolveDefaultPluginGitDir(redirectedEnv)).toBe("/operator/openclaw/git");
+      expect(resolveDefaultPluginNpmDir(redirectedEnv)).toBe(path.join(operatorStateDir, "npm"));
+      expect(resolveDefaultPluginGitDir(redirectedEnv)).toBe(path.join(operatorStateDir, "git"));
       expect(resolveInstalledPluginIndexStorePath({ env: redirectedEnv })).toBe(
-        "/operator/openclaw/state/openclaw.sqlite",
+        path.join(operatorStateDir, "state", "openclaw.sqlite"),
       );
       expect(
         resolveInstalledPluginIndexStateDatabaseOptions({ env: redirectedEnv }).env
           ?.OPENCLAW_STATE_DIR,
-      ).toBe("/operator/openclaw");
+      ).toBe(operatorStateDir);
     });
 
-    expect(resolveDefaultPluginExtensionsDir(redirectedEnv)).toBe("/tmp/ephemeral-run/extensions");
+    expect(resolveDefaultPluginExtensionsDir(redirectedEnv)).toBe(
+      path.join(ephemeralStateDir, "extensions"),
+    );
     expect(resolveInstalledPluginIndexStorePath({ env: redirectedEnv })).toBe(
-      "/tmp/ephemeral-run/state/openclaw.sqlite",
+      path.join(ephemeralStateDir, "state", "openclaw.sqlite"),
     );
     expect(
       resolveInstalledPluginIndexStateDatabaseOptions({ env: redirectedEnv }).env
         ?.OPENCLAW_STATE_DIR,
-    ).toBe("/tmp/ephemeral-run");
+    ).toBe(ephemeralStateDir);
   });
 
   it("isolates concurrent install-root scopes", async () => {
@@ -61,7 +67,10 @@ describe("plugin install root context", () => {
 
     await expect(
       Promise.all([resolveScopedRoot("/operator/one"), resolveScopedRoot("/operator/two")]),
-    ).resolves.toEqual(["/operator/one/extensions", "/operator/two/extensions"]);
+    ).resolves.toEqual([
+      path.join(path.resolve("/operator/one"), "extensions"),
+      path.join(path.resolve("/operator/two"), "extensions"),
+    ]);
   });
 });
 

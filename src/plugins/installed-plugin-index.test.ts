@@ -844,7 +844,10 @@ describe("installed plugin index", () => {
     expectRecordFields(plugin, {
       pluginId: "demo",
       origin: "global",
-      rootDir: fs.realpathSync.native(fixture.rootDir),
+      // The index surfaces the persisted installPath verbatim; canonicalization
+      // happens on the write path, so the expectation must not re-canonicalize
+      // (Windows 8.3 temp names would otherwise never match).
+      rootDir: fixture.rootDir,
     });
     expectSha256(plugin.installRecordHash);
     expect(index.installRecords).toEqual({
