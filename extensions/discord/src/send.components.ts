@@ -276,13 +276,17 @@ export async function sendDiscordComponentMessage(
 ): Promise<DiscordSendResult> {
   const classicDecision = getClassicDiscordMessageDecision(spec);
   if (opts.mediaUrl && classicDecision.mode === "classic") {
+    // Keep a component file block's attachment name across the classic
+    // downgrade; sendMessageDiscord would otherwise fall back to the URL's
+    // name while the component path resolves this chain explicitly below.
+    const explicitAttachmentName = uniqueStrings(extractComponentAttachmentNames(spec))[0];
     return await sendMessageDiscord(to, collapseClassicComponentText(spec), {
       cfg: opts.cfg,
       accountId: opts.accountId,
       token: opts.token,
       rest: opts.rest,
       mediaUrl: opts.mediaUrl,
-      filename: opts.filename,
+      filename: opts.filename?.trim() || explicitAttachmentName,
       mediaLocalRoots: opts.mediaLocalRoots,
       mediaReadFile: opts.mediaReadFile,
       mediaAccess: opts.mediaAccess,
