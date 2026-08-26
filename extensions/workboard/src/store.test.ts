@@ -1536,6 +1536,15 @@ describe("WorkboardStore", () => {
       },
     });
     expect(blockedAgain.metadata?.failureCount).toBe(2);
+
+    const succeeded = await store.update(card.id, {
+      execution: {
+        ...retrying.execution!,
+        status: "succeeded",
+        updatedAt: 50,
+      },
+    });
+    expect(succeeded.metadata?.failureCount).toBe(0);
   });
 
   it("adds comments, links, proof, and archive metadata", async () => {

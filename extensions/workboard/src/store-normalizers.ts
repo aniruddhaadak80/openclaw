@@ -1334,14 +1334,12 @@ export function removeUndefinedMetadataFields(metadata: WorkboardMetadata): Work
     "archivedAt",
     "stale",
     "lifecycleStatusSourceUpdatedAt",
-    "failureCount",
   ] as const) {
     const value = next[key];
-    if (
-      value === undefined ||
-      (Array.isArray(value) && value.length === 0) ||
-      (typeof value === "number" && value === 0 && key === "failureCount")
-    ) {
+    // failureCount must not be stripped when it is a literal 0: a successful
+    // attempt resets the counter, and consumers fall back to recounting stale
+    // attempts history whenever the field is absent.
+    if (value === undefined || (Array.isArray(value) && value.length === 0)) {
       delete next[key];
     }
   }
