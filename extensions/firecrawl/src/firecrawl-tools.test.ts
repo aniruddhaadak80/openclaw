@@ -263,7 +263,7 @@ describe("firecrawl tools", () => {
   });
 
   it("clamps hosted scrape timeouts to the Firecrawl API maximum", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       Response.json({
         success: true,
         data: {
@@ -290,12 +290,14 @@ describe("firecrawl tools", () => {
     });
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(requestInit?.body)) as { timeout?: number };
+    const rawBody = requestInit?.body;
+    expect(typeof rawBody).toBe("string");
+    const body = JSON.parse(rawBody as string) as { timeout?: number };
     expect(body.timeout).toBe(300_000);
   });
 
   it("keeps oversized scrape timeouts for self-hosted endpoints", async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       Response.json({
         success: true,
         data: {
@@ -326,7 +328,9 @@ describe("firecrawl tools", () => {
     });
 
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
-    const body = JSON.parse(String(requestInit?.body)) as { timeout?: number };
+    const rawBody = requestInit?.body;
+    expect(typeof rawBody).toBe("string");
+    const body = JSON.parse(rawBody as string) as { timeout?: number };
     expect(body.timeout).toBe(600_000);
   });
 
