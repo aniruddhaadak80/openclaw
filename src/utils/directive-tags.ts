@@ -158,9 +158,10 @@ export function stripInlineDirectiveTagsForDelivery(text: string): StripInlineDi
     return { text, changed: false };
   }
   const stripped = replaceOutsideCodeRegions(text, INLINE_DIRECTIVE_TAG_WITH_PADDING_RE, () => " ");
-  const changed = stripped !== text;
+  const malformedStripped = replaceOutsideCodeRegions(stripped, MALFORMED_REPLY_DIRECTIVE_RE, () => " ");
+  const changed = malformedStripped !== text;
   return {
-    text: changed ? stripped.trim() : text,
+    text: changed ? malformedStripped.trim() : text,
     changed,
   };
 }
