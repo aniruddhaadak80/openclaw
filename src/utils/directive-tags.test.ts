@@ -315,3 +315,12 @@ describe("sanitizeReplyDirectiveId", () => {
     expect(hasUnpairedSurrogate("a😊b")).toBe(false);
   });
 });
+
+describe("malformed reply directive stripping", () => {
+  it("strips incomplete reply_to_current tags", () => {
+    expect(stripInlineDirectiveTagsForDelivery("Hello [[reply_to_current")).toBe("Hello");
+  });
+  it("strips incomplete reply_to tags", () => {
+    expect(stripInlineDirectiveTagsForDelivery("Hello [[reply_to:someone")).toBe("Hello");
+  });
+});
