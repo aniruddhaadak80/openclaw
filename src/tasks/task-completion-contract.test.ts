@@ -10,9 +10,11 @@ describe("task completion delivery failures", () => {
       resolveRequiredCompletionDeliveryFailureTerminalResult(
         `${"x".repeat(158)}🚀tail`,
       );
+
     expect(result.terminalSummary).toContain(
       `${"x".repeat(158)}...`,
     );
+    expect(result.terminalSummary).not.toContain("\uD83D");
   });
 });
 
