@@ -27,7 +27,6 @@ import type { CodexAttemptRuntime } from "./run-attempt-runtime.js";
 import { joinPresentSections } from "./run-attempt-state.js";
 import type { CodexAttemptTools } from "./run-attempt-tool-setup.js";
 import {
-import { buildAgentHookContextChannelFields } from "../../plugins/hook-agent-context.js";
   buildDeveloperInstructions,
   type CodexContextEngineThreadBootstrapProjection,
 } from "./thread-lifecycle.js";
