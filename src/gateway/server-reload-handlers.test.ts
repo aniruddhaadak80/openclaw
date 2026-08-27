@@ -5246,13 +5246,6 @@ describe("gateway Gmail hot reload handlers", () => {
       expect(harness.reloader.isConfigReloadSettled()).toBe(false);
       expect(harness.terminalPolicy.isEnabled()).toBe(false);
       expect(harness.activateRuntimeSecrets).toHaveBeenNthCalledWith(3, acceptedWithLogging, {
-        reason: "reload",
-        activate: false,
-        publishFailureAsDegraded: true,
-        canPublishFailureAsDegraded: expect.any(Function),
-        includeAuthStoreRefs: undefined,
-      });
-      expect(harness.activateRuntimeSecrets).toHaveBeenNthCalledWith(4, acceptedWithLogging, {
         reason: "restart-check",
         activate: false,
         publishFailureAsDegraded: true,
@@ -5262,6 +5255,12 @@ describe("gateway Gmail hot reload handlers", () => {
         diffConfigPaths(harness.initialConfig, harness.deferredConfig),
       );
       await vi.advanceTimersByTimeAsync(500);
+      expect(harness.activateRuntimeSecrets).toHaveBeenNthCalledWith(4, acceptedWithLogging, {
+        reason: "restart-check",
+        activate: false,
+        publishFailureAsDegraded: true,
+        canPublishFailureAsDegraded: expect.any(Function),
+      });
       expect(harness.requestRecoveryRestart.mock.calls).toEqual([
         [`config reload: ${deferredPlan.restartReasons.join(", ")}`, undefined],
       ]);
@@ -5383,7 +5382,7 @@ describe("gateway Gmail hot reload handlers", () => {
         harness.writeConfig(invalidConfig, `invalid-${_kind}-b`, 2);
         await vi.advanceTimersByTimeAsync(0);
         await expect(reloadError).resolves.toBe(
-          "config reload failed: Error: required SecretRef MISSING_HOT_TOKEN is unavailable",
+          "config restart failed: Error: required SecretRef MISSING_HOT_TOKEN is unavailable",
         );
 
         hoisted.activeTaskBlockers.length = 0;
@@ -5564,7 +5563,7 @@ describe("gateway Gmail hot reload handlers", () => {
       harness.writeConfig(harness.deferredConfig, "unavailable-revert-a", 3);
       await vi.advanceTimersByTimeAsync(0);
       await expect(revalidationError).resolves.toBe(
-        "config reload failed: Error: required SecretRef RESTART_A_TOKEN is unavailable",
+        "config restart failed: Error: required SecretRef RESTART_A_TOKEN is unavailable",
       );
 
       expect(harness.activateRuntimeSecrets).toHaveBeenNthCalledWith(3, harness.deferredConfig, {
@@ -5611,7 +5610,7 @@ describe("gateway Gmail hot reload handlers", () => {
       await vi.advanceTimersByTimeAsync(500);
 
       expect(harness.requestRecoveryRestart.mock.calls).toEqual([
-        ["config reload: gateway.bind", undefined],
+        ["config reload: gateway.port, gateway.auth, gateway.bind", undefined],
       ]);
     } finally {
       hoisted.activeTaskBlockers.length = 0;
