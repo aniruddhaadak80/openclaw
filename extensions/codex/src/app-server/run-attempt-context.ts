@@ -27,6 +27,7 @@ import type { CodexAttemptRuntime } from "./run-attempt-runtime.js";
 import { joinPresentSections } from "./run-attempt-state.js";
 import type { CodexAttemptTools } from "./run-attempt-tool-setup.js";
 import {
+import { buildAgentHookContextChannelFields } from "../../plugins/hook-agent-context.js";
   buildDeveloperInstructions,
   type CodexContextEngineThreadBootstrapProjection,
 } from "./thread-lifecycle.js";
@@ -103,9 +104,15 @@ export async function prepareCodexAttemptContext(
     sessionKey: sandboxSessionKey,
     sessionId: params.sessionId,
     workspaceDir: params.workspaceDir,
-    messageProvider: params.messageProvider ?? undefined,
-    trigger: params.trigger,
+    ...buildAgentHookContextChannelFields({
+      sessionKey: sandboxSessionKey,
+      messageProvider: params.messageProvider,
+      currentChannelId: params.currentChannelId,
+      messageTo: params.messageTo,
+      senderId: params.senderId,
+    }),
     channelId: hookChannelId,
+    trigger: params.trigger,
     ...hookContextWindowFields,
   };
   const hookRunner = getAgentHarnessHookRunner();
