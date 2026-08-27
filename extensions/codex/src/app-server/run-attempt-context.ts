@@ -7,7 +7,6 @@ import {
   getAgentHarnessHookRunner,
   isHostScopedAgentToolActive,
   resolveContextEngineOwnerPluginId,
-  buildAgentHookContextChannelFields,
   runHarnessContextEngineMaintenance,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import {
