@@ -41,13 +41,14 @@ function matchesProgressOnlyPrefix(value: string): boolean {
 }
 
 function hasNonProgressFollowupSentence(value: string): boolean {
-  const boundary = /(?:[.!?:]|\s[-\u2013\u2014])\s+\S/.exec(value);
+  const normalized = value.replace(/([.!?])(?=[A-Za-z])/g, "$1 ");
+  const boundary = /(?:[.!?]|\s[-\u2013\u2014])\s+\S/.exec(normalized);
   if (!boundary) {
     return false;
   }
   const separatorEnd = boundary.index + boundary[0].length - 1;
-  const firstSentence = value.slice(0, separatorEnd).trim();
-  const rest = value.slice(separatorEnd).trim();
+  const firstSentence = normalized.slice(0, separatorEnd).trim();
+  const rest = normalized.slice(separatorEnd).trim();
   return matchesProgressOnlyPrefix(firstSentence) && !isProgressOnlyCompletionText(rest);
 }
 
