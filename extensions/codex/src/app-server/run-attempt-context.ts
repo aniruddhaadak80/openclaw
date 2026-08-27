@@ -30,6 +30,7 @@ import {
   buildDeveloperInstructions,
   type CodexContextEngineThreadBootstrapProjection,
 } from "./thread-lifecycle.js";
+import { buildAgentHookContextChannelFields } from "../../plugins/hook-agent-context.js";
 
 export async function prepareCodexAttemptContext(
   runtime: CodexAttemptRuntime,
