@@ -1,4 +1,5 @@
 import {
+  buildAgentHookContextChannelFields,
   bootstrapHarnessContextEngine,
   buildHarnessContextEngineRuntimeContext,
   CODEX_APP_SERVER_CONTEXT_ENGINE_HOST,
