@@ -3,22 +3,18 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  resolveStorePath,
+  normalizeSessionDeliveryState,
   upsertSessionEntry,
-} from "../../dist/plugin-sdk/session-store-runtime.js";
-import { appendSessionTranscriptMessagesByIdentity } from "../../dist/plugin-sdk/session-transcript-runtime.js";
+} from "openclaw/plugin-sdk/session-store-runtime";
+import { appendSessionTranscriptMessagesByIdentity } from "openclaw/plugin-sdk/session-transcript-runtime";
+import { resolveOpenClawAgentSqlitePath } from "openclaw/plugin-sdk/sqlite-runtime";
 import { applyDockerOpenAiProviderConfig, type OpenClawConfig } from "./docker-openai-seed.ts";
 
 async function main() {
   const stateDir = process.env.OPENCLAW_STATE_DIR?.trim() || path.join(os.homedir(), ".openclaw");
   const configPath =
     process.env.OPENCLAW_CONFIG_PATH?.trim() || path.join(stateDir, "openclaw.json");
-  const session = {
-    agentId: "main",
-    sessionKey: "agent:main:main",
-    sessionId: "sess-main",
-    storePath: resolveStorePath(undefined, { agentId: "main" }),
-  };
+  const storePath = resolveOpenClawAgentSqlitePath({ agentId: "main" });
   const now = Date.now();
 
   await fs.mkdir(path.dirname(configPath), { recursive: true });
@@ -47,24 +43,30 @@ async function main() {
   await fs.writeFile(configPath, JSON.stringify(seededConfig, null, 2), "utf-8");
 
   await upsertSessionEntry({
-    ...session,
+    agentId: "main",
+    sessionKey: "agent:main:main",
+    storePath,
     entry: {
-      sessionId: session.sessionId,
+      sessionId: "sess-main",
       updatedAt: now,
-      deliveryContext: {
-        channel: "imessage",
-        to: "+15551234567",
-        accountId: "imessage-default",
-        threadId: "thread-42",
-      },
+      delivery: normalizeSessionDeliveryState({
+        context: {
+          channel: "imessage",
+          to: "+15551234567",
+          accountId: "imessage-default",
+          threadId: "thread-42",
+        },
+      }),
       displayName: "Docker MCP Channel Smoke",
-      derivedTitle: "Docker MCP Channel Smoke",
-      lastMessagePreview: "seeded transcript",
     },
   });
 
+  // The installed candidate owns the transcript header and ordered parent links.
   await appendSessionTranscriptMessagesByIdentity({
-    ...session,
+    agentId: "main",
+    sessionKey: "agent:main:main",
+    sessionId: "sess-main",
+    storePath,
     config: seededConfig,
     messages: [
       {
@@ -99,15 +101,7 @@ async function main() {
     ],
   });
 
-  process.stdout.write(
-    JSON.stringify({
-      ok: true,
-      stateDir,
-      configPath,
-      sessionKey: session.sessionKey,
-      sessionId: session.sessionId,
-    }) + "\n",
-  );
+  process.stdout.write(`${JSON.stringify({ ok: true, stateDir, configPath, storePath })}\n`);
 }
 
 await main();
