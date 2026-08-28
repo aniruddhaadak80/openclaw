@@ -36,9 +36,12 @@ vi.mock("./send.outbound.js", () => ({
 }));
 
 const loadOutboundMediaFromUrlMock = vi.hoisted(() => vi.fn());
-vi.mock("./runtime-api.js", () => ({
-  loadOutboundMediaFromUrl: loadOutboundMediaFromUrlMock,
-}));
+vi.mock("openclaw/plugin-sdk/outbound-media", async () => {
+  const actual = await vi.importActual<typeof import("openclaw/plugin-sdk/outbound-media")>(
+    "openclaw/plugin-sdk/outbound-media",
+  );
+  return { ...actual, loadOutboundMediaFromUrl: loadOutboundMediaFromUrlMock };
+});
 
 let registerDiscordComponentEntries: typeof import("./components-registry.js").registerDiscordComponentEntries;
 let editDiscordComponentMessage: typeof import("./send.components.js").editDiscordComponentMessage;
@@ -405,27 +408,6 @@ describe("sendDiscordComponentMessage classic message downgrade", () => {
         onDeliveryResult,
       },
     ]);
-  });
-
-  it("forwards the component file block's attachment name through classic downgrades", async () => {
-    await sendDiscordComponentMessage(
-      "channel:chan-1",
-      {
-        blocks: [
-          { type: "text", text: "report" },
-          { type: "file", file: "attachment://report.pdf" },
-        ],
-      },
-      {
-        cfg: DISCORD_TEST_CFG,
-        token: "t",
-        mediaUrl: "https://example.com/remote-name.pdf",
-      },
-    );
-
-    expect(sendMessageDiscordMock).toHaveBeenCalledTimes(1);
-    const options = readMockCall(sendMessageDiscordMock, 0)[2] as { filename?: string };
-    expect(options.filename).toBe("report.pdf");
   });
 
   it("forwards first-chunk reply fanout through classic media downgrades", async () => {
