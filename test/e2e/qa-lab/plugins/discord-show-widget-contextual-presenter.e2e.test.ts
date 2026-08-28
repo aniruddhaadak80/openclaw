@@ -67,7 +67,11 @@ async function readRequestBody(
         });
       }
     }
-    return { body: JSON.parse(String(form.get("payload_json"))) as JsonRecord, files };
+    const payloadJson = form.get("payload_json");
+    if (typeof payloadJson !== "string") {
+      throw new Error("Discord multipart request did not contain string payload_json");
+    }
+    return { body: JSON.parse(payloadJson) as JsonRecord, files };
   }
   const parsed = JSON.parse(raw.toString("utf8")) as unknown;
   return {
@@ -398,7 +402,21 @@ describe("Discord show_widget contextual presenter process proof", () => {
         });
         const result = (await response.json()) as JsonRecord;
         expect(response.status, JSON.stringify(result)).toBe(200);
-        expect(result).toMatchObject({ ok: true, result: { details: { ok: true } } });
+        expect(result).toMatchObject({
+          ok: true,
+          result: {
+            details: {
+              channel: "discord",
+              deliveryStatus: "sent",
+              messageDelivery: {
+                status: "settled",
+                primaryPlatformMessageId: DISCORD_MESSAGE_ID,
+                partialDelivery: false,
+                createdThreadIds: [],
+              },
+            },
+          },
+        });
         const posts = discord.requests.filter((request) => request.method === "POST");
         expect(posts, testCase.label).toHaveLength(before + 1);
         const post = posts.at(-1);

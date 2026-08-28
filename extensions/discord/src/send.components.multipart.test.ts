@@ -73,7 +73,11 @@ describe("Discord component attachment multipart filenames", () => {
         if (!file || typeof file === "string") {
           throw new Error("Discord multipart request did not contain files[0]");
         }
-        const payload = JSON.parse(String(form.get("payload_json"))) as {
+        const payloadJson = form.get("payload_json");
+        if (typeof payloadJson !== "string") {
+          throw new Error("Discord multipart request did not contain string payload_json");
+        }
+        const payload = JSON.parse(payloadJson) as {
           attachments?: Array<{ id: number; filename: string }>;
           flags?: number;
         };
