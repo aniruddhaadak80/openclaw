@@ -1,0 +1,4 @@
+{
+  "title": "Bug: pnpm install fails due to unexpected '--ignore-scripts=false' in .agents/setup",
+  "body": "Running `pnpm install` via `.agents/setup` fails with the error `error: unexpected value 'false' for '--ignore-scripts' found; no more were expected`. The `install_dependencies` function includes `--ignore-scripts=false` which is not a valid value for the current pnpm version (v12.1.0). It should be changed to `--ignore-scripts` or removed."
+}
