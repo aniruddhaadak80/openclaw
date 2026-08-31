@@ -6265,6 +6265,8 @@ export const en: TranslationMap = {
     composer: {
       placeholder: "Message {name}",
       emptyHint: "Write a message to send.",
+      composerInput: "Chat composer",
+      suggestionLabel: "Slash command and skill suggestions",
       placeholderWithAttachments: "Add a message or paste more images...",
       offlineHint: "Offline — messages will be queued and sent when the connection returns.",
       offlineQueuedHint: "Offline — {count} queued; messages send when the connection returns.",

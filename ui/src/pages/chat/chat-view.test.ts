@@ -4870,6 +4870,47 @@ describe("chat slash menu accessibility", () => {
     expect(onSlashIntent).toHaveBeenCalledOnce();
   });
 
+  it("exposes the composer textarea as a stable named editable combobox", async () => {
+    const { container } = createReactiveDraftHarness();
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea");
+    expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
+    // Stable accessible name drives aria-label, separate from the visible
+    // placeholder (which changes with attachment state and dictation).
+    expect(textarea?.getAttribute("aria-label")).toBe(t("chat.composer.composerInput"));
+    expect(textarea?.getAttribute("placeholder")).toBe(
+      t("chat.composer.placeholder", { name: "OpenClaw" }),
+    );
+    // Editable-combobox contract: role, autocomplete, listbox, and
+    // activedescendant on the focused textarea (not the wrapper).
+    expect(textarea?.getAttribute("role")).toBe("combobox");
+    expect(textarea?.getAttribute("aria-autocomplete")).toBe("list");
+    // No listbox open yet: aria-controls/expanded are not exposed.
+    expect(textarea?.getAttribute("aria-controls")).toBeNull();
+    expect(textarea?.getAttribute("aria-expanded")).toBeNull();
+    // The wrapper must not duplicate the role (would be a combobox in a
+    // combobox, breaking screen-reader navigation).
+    expect(
+      container.querySelector(".agent-chat__composer-combobox")?.getAttribute("role"),
+    ).toBeNull();
+
+    // Open the slash menu and verify popup state still lives on the textarea.
+    inputDraftAtEnd(container, "/sta");
+    await Promise.resolve();
+    await Promise.resolve();
+    const slashListbox = container.querySelector<HTMLElement>(
+      ".agent-chat__slash-menu-listbox, .slash-menu",
+    );
+    expect(slashListbox).not.toBeNull();
+    expect(textarea?.getAttribute("aria-controls")).toBe(slashListbox?.id ?? null);
+    expect(textarea?.getAttribute("aria-expanded")).toBe("true");
+    expect(textarea?.getAttribute("aria-label")).toBe(t("chat.composer.composerInput"));
+
+    // Attachment-driven placeholder swap must not change the aria-label.
+    const { container: attachedContainer } = createReactiveDraftHarness();
+    const attachedTextarea = attachedContainer.querySelector<HTMLTextAreaElement>("textarea");
+    expect(attachedTextarea?.getAttribute("aria-label")).toBe(t("chat.composer.composerInput"));
+  });
+
   it("shows skills after commands in the slash picker and highlights typed prefixes", () => {
     replaceSkillCommands({
       key: "status_report",

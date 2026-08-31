@@ -69,6 +69,7 @@ type ChatComposerViewContext = {
   questionPanelProps: ReturnType<typeof createGatewayQuestionPanelProps> | null;
   showComposer: boolean;
   placeholder: string;
+  composerLabel: string;
   handleKeyDown: (event: KeyboardEvent) => void;
   handleBeforeInput: (event: InputEvent) => void;
   handleInput: (event: InputEvent) => void;
@@ -127,6 +128,7 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
     slashMenuListboxId,
     slashMenuAnnouncementId,
     goalComposer,
+  composerLabel,
   } = context;
   if (slashMenuVisible || skillMenuVisible) {
     ensureChatComposerPickerDismissal();
@@ -409,6 +411,7 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
                   dir=${draftDirection}
                   ?disabled=${!canCompose}
                   ?readonly=${dictation?.locksComposer === true || goalComposer.pending}
+                  role="combobox"
                   aria-autocomplete="list"
                   aria-controls=${ifDefined(
                     slashMenuVisible || skillMenuVisible ? slashMenuListboxId : undefined,
@@ -443,7 +446,7 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
                       handleChatAttachmentPaste(event, props);
                     }
                   }}
-                  aria-label=${placeholder}
+                  aria-label=${composerLabel}
                   placeholder=${dictation?.active ? "" : placeholder}
                   rows="1"
                 ></textarea>

@@ -284,6 +284,11 @@ export function renderChatComposer(props: ChatComposerProps) {
     : hasVisualAttachments
       ? t("chat.composer.placeholderWithAttachments")
       : t("chat.composer.placeholder", { name: props.assistantName || "agent" });
+  // Stable accessible name for the editable combobox. The visible
+  // placeholder changes with attachment state and dictation, so it must not
+  // also drive aria-label; assistive technology needs one stable identity for
+  // the widget that owns the slash/skill listbox.
+  const composerLabel = t("chat.composer.composerInput");
 
   // Offline text and attachments may enter the persisted reconnect queue, but
   // slash commands are live controls and must not execute against stale state.
@@ -638,6 +643,7 @@ export function renderChatComposer(props: ChatComposerProps) {
     questionPanelProps,
     showComposer,
     placeholder,
+    composerLabel,
     handleKeyDown,
     handleBeforeInput,
     handleInput,
