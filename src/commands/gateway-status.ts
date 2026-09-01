@@ -109,29 +109,57 @@ export async function gatewayStatusCommand(
         )
       : undefined;
 
-  const probePass = await withProgress(
-    {
-      label: "Inspecting gateways…",
-      indeterminate: true,
-      enabled: opts.json !== true,
-    },
-    async () =>
-      await runGatewayStatusProbePass({
-        cfg,
-        opts,
-        overallTimeoutMs,
-        discoveryTimeoutMs,
-        wideAreaDomain,
-        baseTargets,
-        remotePort,
-        sshTarget,
-        sshIdentity,
-        loadSshTunnelModule,
-        localTlsFingerprint: localCertificate?.ok
-          ? localCertificate.value.fingerprintSha256
-          : undefined,
-      }),
-  );
+  // Bounded SIGINT/SIGTERM handling: abort the probe, await tunnel
+  // cleanup in probe-run's finally, remove handlers, and exit with the
+  // conventional shell codes (130 for SIGINT, 143 for SIGTERM).
+  const controller = new AbortController();
+  let abortSignal: NodeJS.Signals | null = null;
+  const onSigInt = () => {
+    abortSignal = "SIGINT";
+    controller.abort();
+  };
+  const onSigTerm = () => {
+    abortSignal = "SIGTERM";
+    controller.abort();
+  };
+  process.on("SIGINT", onSigInt);
+  process.on("SIGTERM", onSigTerm);
+  let probePass!: Awaited<ReturnType<typeof runGatewayStatusProbePass>>;
+  try {
+    probePass = await withProgress(
+      {
+        label: "Inspecting gateways…",
+        indeterminate: true,
+        enabled: opts.json !== true,
+      },
+      async () =>
+        await runGatewayStatusProbePass({
+          cfg,
+          opts,
+          overallTimeoutMs,
+          discoveryTimeoutMs,
+          wideAreaDomain,
+          baseTargets,
+          remotePort,
+          sshTarget,
+          sshIdentity,
+          loadSshTunnelModule,
+          localTlsFingerprint: localCertificate?.ok
+            ? localCertificate.value.fingerprintSha256
+            : undefined,
+          signal: controller.signal,
+        }),
+    );
+  } finally {
+    process.off("SIGINT", onSigInt);
+    process.off("SIGTERM", onSigTerm);
+    if (controller.signal.aborted) {
+      // Give probe-run's finally a tick to stop the exact child and remove
+      // listeners before exiting. The tunnel's stop() is awaited there.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      process.exit(abortSignal === "SIGINT" ? 130 : 143);
+    }
+  }
 
   const warnings = buildGatewayStatusWarnings({
     probed: probePass.probed,

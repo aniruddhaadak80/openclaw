@@ -143,6 +143,7 @@ export async function startSshPortForward(opts: {
   localPortPreferred: number;
   remotePort: number;
   timeoutMs: number;
+  signal?: AbortSignal;
 }): Promise<SshTunnel> {
   const parsed = parseSshTarget(opts.target);
   if (!parsed) {
@@ -193,6 +194,10 @@ export async function startSshPortForward(opts: {
   // Security: Use '--' to prevent userHost from being interpreted as an option
   args.push("--", userHost);
 
+  if (opts.signal?.aborted) {
+    throw new DOMException("Aborted", "AbortError");
+  }
+
   const stderr: string[] = [];
   const child = spawn(sshPath, args, {
     stdio: ["ignore", "ignore", "pipe"],
@@ -224,6 +229,21 @@ export async function startSshPortForward(opts: {
       }
     })());
 
+  // AbortSignal owns the tunnel lifetime — abort races listener readiness
+  // and ensures the exact child is stopped during startup/active use.
+  let onAbort: (() => void) | undefined;
+  const abortPromise = opts.signal
+    ? new Promise<never>((_, reject) => {
+        onAbort = () => {
+          try {
+            child.kill("SIGTERM");
+          } catch {}
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        opts.signal!.addEventListener("abort", onAbort, { once: true });
+      })
+    : null;
+
   try {
     await Promise.race([
       waitForLocalListener(localPort, Math.max(250, opts.timeoutMs)),
@@ -233,11 +253,19 @@ export async function startSshPortForward(opts: {
           reject(new Error(`ssh exited (${code ?? "null"}${signal ? `/${signal}` : ""})`));
         });
       }),
+      ...(abortPromise ? [abortPromise] : []),
     ]);
   } catch (err) {
     await stop();
+    if (onAbort) {
+      opts.signal?.removeEventListener("abort", onAbort);
+    }
     const suffix = stderr.length > 0 ? `\n${stderr.join("\n")}` : "";
     throw new Error(`${formatErrorMessage(err)}${suffix}`, { cause: err });
+  } finally {
+    if (onAbort) {
+      opts.signal?.removeEventListener("abort", onAbort);
+    }
   }
 
   return {

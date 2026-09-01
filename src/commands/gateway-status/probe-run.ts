@@ -46,6 +46,7 @@ export async function runGatewayStatusProbePass(params: {
   sshIdentity: string | null;
   loadSshTunnelModule: () => Promise<typeof import("../../infra/ssh-tunnel.js")>;
   localTlsFingerprint?: string;
+  signal?: AbortSignal;
 }): Promise<{
   discovery: GatewayBonjourBeacon[];
   probed: GatewayStatusProbedTarget[];
@@ -66,6 +67,10 @@ export async function runGatewayStatusProbePass(params: {
     if (!sshTarget) {
       return null;
     }
+    if (params.signal?.aborted) {
+      sshTunnelError = "Aborted";
+      return null;
+    }
     try {
       const { startSshPortForward } = await params.loadSshTunnelModule();
       const tunnel = await startSshPortForward({
@@ -74,10 +79,15 @@ export async function runGatewayStatusProbePass(params: {
         localPortPreferred: params.remotePort,
         remotePort: params.remotePort,
         timeoutMs: Math.min(1500, params.overallTimeoutMs),
+        signal: params.signal,
       });
       sshTunnelStarted = true;
       return tunnel;
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") {
+        sshTunnelError = "Aborted";
+        return null;
+      }
       sshTunnelError = formatErrorMessage(err);
       return null;
     }
