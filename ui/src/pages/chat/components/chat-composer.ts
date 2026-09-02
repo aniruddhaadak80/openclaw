@@ -284,11 +284,6 @@ export function renderChatComposer(props: ChatComposerProps) {
     : hasVisualAttachments
       ? t("chat.composer.placeholderWithAttachments")
       : t("chat.composer.placeholder", { name: props.assistantName || "agent" });
-  // Stable accessible name for the editable combobox. The visible
-  // placeholder changes with attachment state and dictation, so it must not
-  // also drive aria-label; assistive technology needs one stable identity for
-  // the widget that owns the slash/skill listbox.
-  const composerLabel = t("chat.composer.composerInput");
 
   // Offline text and attachments may enter the persisted reconnect queue, but
   // slash commands are live controls and must not execute against stale state.
@@ -497,13 +492,20 @@ export function renderChatComposer(props: ChatComposerProps) {
     enabled: props.composerHoldToRecord !== false,
     dictationAvailable: devicePicker.dictationStatus === "ready",
     realtimeTalkActive: props.realtimeTalkActive === true,
-    onCommit: (transcript: string) => {
+    onCommit: (transcript: string, late?: true) => {
       const target = state.composerTextarea;
-      const selection = state.dictationSelection ?? {
-        start: target?.selectionStart ?? visibleDraft.length,
-        end: target?.selectionEnd ?? visibleDraft.length,
-        value: props.getDraft?.() ?? props.draft,
-      };
+      const captured = state.dictationSelection;
+      const liveValue = target?.value ?? props.getDraft?.() ?? props.draft;
+      // Stop unlocks the draft. Preserve later edits by using the live caret only
+      // when a delayed final finds that the captured draft has changed.
+      const selection =
+        captured && (!late || captured.value === liveValue)
+          ? captured
+          : {
+              start: target?.selectionStart ?? liveValue.length,
+              end: target?.selectionEnd ?? liveValue.length,
+              value: liveValue,
+            };
       const insertion = insertComposerDictation(
         selection.value,
         transcript,
@@ -643,7 +645,6 @@ export function renderChatComposer(props: ChatComposerProps) {
     questionPanelProps,
     showComposer,
     placeholder,
-    composerLabel,
     handleKeyDown,
     handleBeforeInput,
     handleInput,

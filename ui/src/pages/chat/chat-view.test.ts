@@ -1002,6 +1002,7 @@ describe("chat run error", () => {
       ],
       placementStartup: {
         sessionKey: "main",
+        targetKind: "profile",
         phase: "failed",
         startedAt: 1,
         retryable: true,
@@ -1047,6 +1048,7 @@ describe("chat run error", () => {
         ],
         placementStartup: {
           sessionKey: "agent:main:startup",
+          targetKind: "profile",
           phase: "failed",
           startedAt: 1,
           retryable: true,
@@ -1164,6 +1166,7 @@ describe("chat run error", () => {
     const container = renderChatView({
       placementStartup: {
         sessionKey: "agent:main:startup",
+        targetKind: "profile",
         phase: "failed",
         startedAt: 1,
         error: "⚠️ Provisioning failed\n  Final diagnostic line  ",
@@ -4870,47 +4873,6 @@ describe("chat slash menu accessibility", () => {
     expect(onSlashIntent).toHaveBeenCalledOnce();
   });
 
-  it("exposes the composer textarea as a stable named editable combobox", async () => {
-    const { container } = createReactiveDraftHarness();
-    const textarea = container.querySelector<HTMLTextAreaElement>("textarea");
-    expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
-    // Stable accessible name drives aria-label, separate from the visible
-    // placeholder (which changes with attachment state and dictation).
-    expect(textarea?.getAttribute("aria-label")).toBe(t("chat.composer.composerInput"));
-    expect(textarea?.getAttribute("placeholder")).toBe(
-      t("chat.composer.placeholder", { name: "OpenClaw" }),
-    );
-    // Editable-combobox contract: role, autocomplete, listbox, and
-    // activedescendant on the focused textarea (not the wrapper).
-    expect(textarea?.getAttribute("role")).toBe("combobox");
-    expect(textarea?.getAttribute("aria-autocomplete")).toBe("list");
-    // No listbox open yet: aria-controls/expanded are not exposed.
-    expect(textarea?.getAttribute("aria-controls")).toBeNull();
-    expect(textarea?.getAttribute("aria-expanded")).toBeNull();
-    // The wrapper must not duplicate the role (would be a combobox in a
-    // combobox, breaking screen-reader navigation).
-    expect(
-      container.querySelector(".agent-chat__composer-combobox")?.getAttribute("role"),
-    ).toBeNull();
-
-    // Open the slash menu and verify popup state still lives on the textarea.
-    inputDraftAtEnd(container, "/sta");
-    await Promise.resolve();
-    await Promise.resolve();
-    const slashListbox = container.querySelector<HTMLElement>(
-      ".agent-chat__slash-menu-listbox, .slash-menu",
-    );
-    expect(slashListbox).not.toBeNull();
-    expect(textarea?.getAttribute("aria-controls")).toBe(slashListbox?.id ?? null);
-    expect(textarea?.getAttribute("aria-expanded")).toBe("true");
-    expect(textarea?.getAttribute("aria-label")).toBe(t("chat.composer.composerInput"));
-
-    // Attachment-driven placeholder swap must not change the aria-label.
-    const { container: attachedContainer } = createReactiveDraftHarness();
-    const attachedTextarea = attachedContainer.querySelector<HTMLTextAreaElement>("textarea");
-    expect(attachedTextarea?.getAttribute("aria-label")).toBe(t("chat.composer.composerInput"));
-  });
-
   it("shows skills after commands in the slash picker and highlights typed prefixes", () => {
     replaceSkillCommands({
       key: "status_report",
@@ -5589,6 +5551,38 @@ describe("chat slash menu accessibility", () => {
     container = harness.renderCurrent();
     expect(container.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("/pair-device ");
     expect(container.querySelector(".slash-menu")).toBeNull();
+  });
+
+  it("keeps a stable composer name when attachments change its placeholder", () => {
+    const harness = createReactiveDraftHarness();
+    const textarea = requireElement(
+      harness.container,
+      "textarea",
+      "chat composer",
+    ) as HTMLTextAreaElement;
+    const initialPlaceholder = textarea.placeholder;
+    expect(textarea.getAttribute("aria-label")).toBe("Chat composer");
+    expect(textarea.hasAttribute("role")).toBe(false);
+
+    harness.renderCurrent({
+      attachments: [
+        {
+          id: "image",
+          fileName: "sample.png",
+          mimeType: "image/png",
+          previewUrl: "blob:sample-image",
+          sizeBytes: 3,
+        },
+      ],
+    });
+    expect(harness.container.querySelector(".chat-attachment-thumb")).not.toBeNull();
+    expect(textarea.placeholder).not.toBe(initialPlaceholder);
+    expect(textarea.getAttribute("aria-label")).toBe("Chat composer");
+    expect(textarea.hasAttribute("role")).toBe(false);
+
+    harness.renderCurrent({ attachments: [] });
+    expect(textarea.placeholder).toBe(initialPlaceholder);
+    expect(textarea.getAttribute("aria-label")).toBe("Chat composer");
   });
 
   it("updates the active descendant and live announcement during command navigation", () => {
@@ -9291,19 +9285,16 @@ describe("right-click Reply", () => {
     const section = container.querySelector<HTMLElement>(".card.chat");
     expect(section).not.toBeNull();
 
-    const group = document.createElement("div");
-    group.className = "chat-group";
-    const bubble = document.createElement("div");
-    bubble.className = "chat-bubble";
-    bubble.dataset.messageId = "msg-1";
-    bubble.dataset.messageText = "selectable text";
+    const { bubble, group } = appendChatBubble(container, {
+      messageId: "msg-1",
+      text: "selectable text",
+    });
     bubble.textContent = "selectable text";
     const otherBubble = document.createElement("div");
     otherBubble.className = "chat-bubble";
     otherBubble.dataset.messageText = "other text";
     otherBubble.textContent = "other text";
-    group.append(bubble, otherBubble);
-    section!.querySelector(".chat-thread-inner")!.appendChild(group);
+    group.append(otherBubble);
 
     const bubbleText = expectDefined(bubble.firstChild, "bubble text node");
     const otherText = expectDefined(otherBubble.firstChild, "other bubble text node");
