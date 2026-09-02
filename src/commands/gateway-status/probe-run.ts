@@ -5,6 +5,7 @@ import {
 } from "@openclaw/normalization-core/string-coerce";
 import type { OpenClawConfig } from "../../config/types.js";
 import { probeGateway } from "../../gateway/probe.js";
+import { isAbortError } from "../../infra/abort-signal.js";
 import {
   discoverGatewayBeacons,
   type GatewayBonjourBeacon,
@@ -84,7 +85,7 @@ export async function runGatewayStatusProbePass(params: {
       sshTunnelStarted = true;
       return tunnel;
     } catch (err) {
-      if ((err as Error)?.name === "AbortError") {
+      if (isAbortError(err)) {
         sshTunnelError = "Aborted";
         return null;
       }
@@ -158,6 +159,7 @@ export async function runGatewayStatusProbePass(params: {
               ? params.localTlsFingerprint
               : undefined,
           timeoutMs: resolveProbeBudgetMs(params.overallTimeoutMs, target),
+          signal: params.signal,
         });
         return {
           target,
