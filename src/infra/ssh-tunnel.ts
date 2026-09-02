@@ -207,84 +207,22 @@ export async function startSshPortForward(opts: {
     stderr.push(...lines);
   });
 
-  // Memoize teardown so concurrent callers join the same process-reaping
-  // fence. `child.killed` only means a signal was dispatched, not that the
-  // process is reaped — so parked concurrent callers must still await
-  // `close`/`exit`, not return early. Track TERM/KILL escalation
-  // exactly once and resolve only after the child settles.
-  let teardownPromise: Promise<void> | undefined;
-  let termSent = false;
-  let killSent = false;
-  let childExited = false;
-  // Mark reaped once so already-exited idempotence is observable without
-  // racing the `exit` handler that the teardown installs.
-  child.once("exit", () => {
-    childExited = true;
+  const exited = new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+    child.once("close", () => resolve());
   });
-  child.once("close", () => {
-    childExited = true;
-  });
-  const stop = async () => {
-    if (teardownPromise) {
-      return teardownPromise;
-    }
-    // Already reaped — idempotent fast path without dispatching signals.
-    if (childExited || child.exitCode !== null || child.signalCode !== null) {
-      return;
-    }
-    teardownPromise = new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(killTimer);
-        resolve();
-      };
-      const onExit = () => {
-        finish();
-      };
-      child.once("exit", onExit);
-      child.once("close", onExit);
-      child.once("error", onExit);
-      const killTimer = setTimeout(() => {
-        if (killSent) {
-          return;
-        }
-        killSent = true;
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // Process may have already exited; treat as settled via exit/close.
-        }
-        // Do not resolve here — await the child's exit/close so delayed
-        // post-SIGKILL settlement is still observed before resolving.
-      }, 1500);
-      // Unref the grace timer so it does not keep the process alive in tests.
-      // SAFETY: NodeJS.Timeout unref is optional across platforms; guarded by optional chain
-      const maybeTimer = killTimer as unknown as { unref?: () => void };
-      maybeTimer.unref?.();
-
-      if (!termSent) {
-        termSent = true;
-        try {
-          const sent = child.kill("SIGTERM");
-          if (!sent) {
-            // Child already exited synchronously — let the exit/close handler settle.
-          }
-        } catch {
-          // Child already exited — settle via the exit/close handler.
-        }
+  let stopping: Promise<void> | undefined;
+  const stop = () =>
+    (stopping ??= (async () => {
+      // Sending a signal is not exit; every caller must await the same child lifetime.
+      const timer = setTimeout(() => child.kill("SIGKILL"), 1500);
+      try {
+        child.kill("SIGTERM");
+        await exited;
+      } finally {
+        clearTimeout(timer);
       }
-      // If the child was already reaped before we installed handlers, settle
-      // immediately so we do not wait for an event that will never fire.
-      if (child.exitCode !== null || child.signalCode !== null || childExited) {
-        finish();
-      }
-    });
-    return teardownPromise;
-  };
+    })());
 
   try {
     await Promise.race([
