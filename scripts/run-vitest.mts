@@ -809,6 +809,25 @@ function collectExplicitTestFileArgs(argv: string[]): string[] {
 }
 
 /**
+ * Returns true if argv already contains any form of --passWithNoTests
+ * in the pre-sentinel option region.
+ */
+function hasExistingPassWithNoTestsArg(argv: string[], sentinelIndex: number): boolean {
+  const end = sentinelIndex === -1 ? argv.length : sentinelIndex;
+  for (let i = 0; i < end; i++) {
+    const arg = argv[i];
+    if (
+      arg === "--passWithNoTests" ||
+      arg === "--no-passWithNoTests" ||
+      arg.startsWith("--passWithNoTests=")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Forces explicit test-file targets to fail when Vitest finds no matching tests.
  */
 export function resolveExplicitTestFileNoPassArgs(argv: string[]): string[] {
@@ -816,6 +835,9 @@ export function resolveExplicitTestFileNoPassArgs(argv: string[]): string[] {
     return argv;
   }
   const sentinelIndex = argv.indexOf("--");
+  if (hasExistingPassWithNoTestsArg(argv, sentinelIndex)) {
+    return argv;
+  }
   if (sentinelIndex === -1) {
     return [...argv, "--passWithNoTests=false"];
   }
@@ -887,6 +909,18 @@ function resolveDelegatedVitestArgs(argv: string[]): string[] {
       const optionValue = argv[index + 1];
       if (optionValue !== undefined) {
         optionArgs.push(optionValue);
+        index += 1;
+      }
+      continue;
+    }
+    // Boolean flags that accept a separated "true"/"false" value
+    // (e.g. --passWithNoTests false) must consume the next arg so it
+    // is not misclassified as a positional test-target.
+    if (arg === "--passWithNoTests" || arg === "--no-passWithNoTests") {
+      optionArgs.push(arg);
+      const next = argv[index + 1];
+      if (next === "true" || next === "false") {
+        optionArgs.push(next);
         index += 1;
       }
       continue;
