@@ -24,8 +24,10 @@ import {
   resolveChatPaneObserverRunId,
 } from "../../lib/observer-digest.ts";
 import { hasSessionPresenceViewers } from "../../lib/presence-users.ts";
+import { resolveSessionDisplayName } from "../../lib/session-display.ts";
 import { isSessionRunActive } from "../../lib/session-run-state.ts";
 import {
+  areUiSessionKeysEquivalent,
   buildAgentMainSessionKey,
   resolveUiConfiguredMainKey,
 } from "../../lib/sessions/session-key.ts";
@@ -149,6 +151,16 @@ export class ChatPane extends ChatPaneLayoutRender {
     const inlineApproval =
       findInlineApproval(state.chatSessionApprovalQueue ?? [], state.sessionKey) ??
       findInlineApproval(overlays?.snapshot?.approvalQueue ?? [], state.sessionKey);
+    // Resolve the source session display name for the inline approval card
+    const sourceSessionKey = inlineApproval?.sourceSessionKey?.trim();
+    const sourceSessionRow = sourceSessionKey
+      ? state.sessionsResult?.sessions?.find((row) =>
+          areUiSessionKeysEquivalent(row.key, sourceSessionKey),
+        )
+      : undefined;
+    const inlineApprovalSourceSessionDisplayName = sourceSessionKey
+      ? resolveSessionDisplayName(sourceSessionKey, sourceSessionRow)
+      : undefined;
     // Tool rows consult the global title store while rendering. Requests capture
     // session + agent at schedule time, so another pane cannot re-route them.
     configureToolTitleFetcher({
@@ -416,6 +428,9 @@ export class ChatPane extends ChatPaneLayoutRender {
       diskSpace,
       runError: catalogKey ? null : (state.chatRunError ?? placementRunError),
       inlineApproval: sessionParticipationBlocked ? null : inlineApproval,
+      inlineApprovalSourceSessionDisplayName: sessionParticipationBlocked
+        ? undefined
+        : inlineApprovalSourceSessionDisplayName,
       approvalBusy: overlays?.snapshot?.approvalBusy,
       approvalCanGrant: overlays?.snapshot?.approvalCanGrant ?? false,
       approvalErrors: overlays?.snapshot?.approvalErrors,

@@ -74,6 +74,7 @@ export type ChatProps = Omit<
     error: string | null;
     diskSpace?: SessionPlacementDiskSpace;
     inlineApproval?: ExecApprovalRequest | null;
+    inlineApprovalSourceSessionDisplayName?: string;
     approvalBusy?: boolean;
     approvalCanGrant: boolean;
     approvalErrors?: ReadonlyMap<string, string>;
@@ -356,6 +357,7 @@ export function renderChat(props: ChatProps) {
                           canGrant: props.approvalCanGrant,
                           error: props.approvalErrors?.get(props.inlineApproval.id) ?? null,
                           variant: "inline",
+                          sourceSessionDisplayName: props.inlineApprovalSourceSessionDisplayName,
                           onDecision: props.onApprovalDecision,
                         })}
                       </div>`

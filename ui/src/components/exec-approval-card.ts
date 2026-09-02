@@ -28,6 +28,7 @@ type ExecApprovalCardProps = {
   error: string | null;
   variant: "inline" | "modal";
   queueCount?: number;
+  sourceSessionDisplayName?: string;
   onDecision: (approvalId: string, decision: ExecApprovalDecision) => void | Promise<void>;
 };
 
@@ -384,7 +385,8 @@ export function renderExecApprovalCard(props: ExecApprovalCardProps) {
     ${props.variant === "inline" && active.sourceSessionKey
       ? html`<div class="exec-approval-warning" role="note">
           ${t("execApproval.requestedBySession", {
-            session: resolveSessionDisplayName(active.sourceSessionKey),
+            session:
+              props.sourceSessionDisplayName ?? resolveSessionDisplayName(active.sourceSessionKey),
           })}
         </div>`
       : nothing}
