@@ -403,33 +403,25 @@ async function describeTelegramAllowedReactionSample(params: {
       token: params.token,
       accountId: params.accountId,
     })
-    .catch(() => null);
-  if (!reactions?.length) {
+    .catch(() => undefined);
+  if (reactions === undefined) {
     return "";
   }
-  // The react wire path accepts numeric custom_emoji_id values as native custom
-  // reactions (send-actions.ts), so hiding them here would dead-end models on
-  // chats that only allow custom reactions.
-  const emojis: string[] = [];
-  const customIds: string[] = [];
-  for (const reaction of reactions) {
-    if (emojis.length + customIds.length >= TELEGRAM_REACTION_HINT_LIMIT) {
-      break;
-    }
-    if (reaction.type === "emoji") {
-      emojis.push(reaction.emoji);
-    } else if (reaction.type === "custom_emoji" && reaction.custom_emoji_id) {
-      customIds.push(reaction.custom_emoji_id);
-    }
-  }
-  const parts: string[] = [];
-  if (emojis.length) {
-    parts.push(emojis.join(" "));
-  }
-  if (customIds.length) {
-    parts.push(`numeric custom IDs ${customIds.join(", ")}`);
-  }
-  return parts.length ? ` This chat allows: ${parts.join("; ")}.` : "";
+  const allowed =
+    reactions ??
+    TELEGRAM_SUPPORTED_REACTION_EMOJI_LIST.map((emoji) => ({ type: "emoji" as const, emoji }));
+  // Preserve portable alternatives when Telegram returns custom reactions first.
+  const emojis = allowed
+    .filter((reaction) => reaction.type === "emoji")
+    .slice(0, TELEGRAM_REACTION_HINT_LIMIT)
+    .map((reaction) => reaction.emoji);
+  const customIds = allowed
+    .filter((reaction) => reaction.type === "custom_emoji")
+    .slice(0, TELEGRAM_REACTION_HINT_LIMIT - emojis.length)
+    .map((reaction) => reaction.custom_emoji_id);
+  const customSample = customIds.length ? `numeric custom IDs ${customIds.join(", ")}` : "";
+  const sample = [emojis.join(" "), customSample].filter(Boolean).join("; ");
+  return sample ? ` This chat allows: ${sample}.` : "";
 }
 
 export async function handleTelegramAction(
