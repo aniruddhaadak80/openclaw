@@ -1,5 +1,7 @@
 // Coverage for assistant failover decisions and auth-profile rotation.
 import { describe, expect, it, vi } from "vitest";
+import { projectProviderError } from "../../../../packages/ai/src/utils/provider-error.js";
+import { buildRealtimeVoiceAgentErrorProviderResult } from "../../../talk/agent-run-control.js";
 import { formatBillingErrorMessage } from "../../embedded-agent-helpers.js";
 import { FailoverError } from "../../failover-error.js";
 import { handleAssistantFailover, isShortWindowRateLimitMessage } from "./assistant-failover.js";
@@ -518,6 +520,49 @@ describe("handleAssistantFailover", () => {
   });
 
   describe("surface_error branch (openclaw#70124)", () => {
+    it.each([
+      Object.assign(new Error("This operation was aborted"), { name: "AbortError" }),
+      Object.assign(new Error("The operation timed out"), { name: "TimeoutError" }),
+      new Error("provider connection failed"),
+    ])(
+      "keeps provider $name failures visible to realtime voice with an active caller",
+      async (error) => {
+        const signal = new AbortController().signal;
+        const projected = projectProviderError(error, signal);
+        expect(projected.stopReason).toBe("error");
+        const outcome = await handleAssistantFailover(
+          makeParams({
+            initialDecision: { action: "surface_error", reason: null },
+            failoverReason: null,
+            billingFailure: false,
+            lastAssistant: {
+              role: "assistant",
+              api: "openai-completions",
+              provider: "openai",
+              model: "test-model",
+              content: [],
+              usage: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 0,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+              },
+              timestamp: 0,
+              ...projected,
+            },
+          }),
+        );
+        const failure = expectThrownFailoverError(outcome);
+        expect(failure.rawError).toBe(error.message);
+        expect(buildRealtimeVoiceAgentErrorProviderResult(failure)).toEqual({
+          error: failure.message,
+        });
+        expect(signal.aborted).toBe(false);
+      },
+    );
+
     it("logs the incremented count after a successful transient retry", async () => {
       let transientRetryCount = 0;
       const logAssistantFailoverDecision = vi.fn();
@@ -620,25 +665,46 @@ describe("handleAssistantFailover", () => {
       expect(err.rawError).toBe(rawError);
     });
 
-    it("preserves the raw provider error on surfaced failures", async () => {
-      const rawError = '  400 {"error":{"message":"credit balance is too low"}}  ';
-      const outcome = await handleAssistantFailover(
-        makeParams({
-          initialDecision: { action: "surface_error", reason: "billing" },
-          failoverReason: "billing",
-          billingFailure: true,
-          lastAssistant: {
-            errorMessage: rawError,
-            model: "claude-haiku-4-5-20251001",
-            provider: "Anthropic",
-          } as Params["lastAssistant"],
-        }),
-      );
+    it.each([
+      [
+        "surface_error",
+        "billing",
+        '  400 {"error":{"message":"credit balance is too low"}}  ',
+        400,
+      ],
+      ["surface_error", "timeout", "500 provider returned HTTP 500", 500],
+      ["surface_error", "timeout", "503 service unavailable", 503],
+      ["surface_error", "timeout", "request timed out", 408],
+      ["fallback_model", "timeout", "500 provider returned HTTP 500", 500],
+      ["fallback_model", "timeout", "503 service unavailable", 503],
+      ["fallback_model", "timeout", "request timed out", 408],
+      ["rotate_profile", "overloaded", "529 overloaded", 529],
+      ["rotate_profile", "overloaded", "503 overloaded", 503],
+    ] as const)(
+      "preserves provider status and raw error through %s: %s / %s",
+      async (action, reason, rawError, status) => {
+        const outcome = await handleAssistantFailover(
+          makeParams({
+            initialDecision: { action, reason },
+            failoverReason: reason,
+            fallbackConfigured: action !== "surface_error",
+            overloadProfileRotations: 3,
+            billingFailure: reason === "billing",
+            lastAssistant: {
+              stopReason: "error",
+              errorMessage: rawError,
+              model: "claude-haiku-4-5-20251001",
+              provider: "Anthropic",
+            } as Params["lastAssistant"],
+          }),
+        );
 
-      const err = expectThrownFailoverError(outcome);
-      expect(err.reason).toBe("billing");
-      expect(err.rawError).toBe(rawError.trim());
-    });
+        const err = expectThrownFailoverError(outcome);
+        expect(err.reason).toBe(reason);
+        expect(err.status).toBe(status);
+        expect(err.rawError).toBe(rawError.trim());
+      },
+    );
 
     it("coerces a null decision reason onto the most specific non-timeout failure signal", async () => {
       const outcome = await handleAssistantFailover(
