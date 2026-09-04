@@ -1,0 +1,4 @@
+{
+  "title": "fix: update vulnerable dependencies fast-uri and qs",
+  "body": "This PR updates `fast-uri` to version `4.1.4` and `qs` to `6.16.0` to address moderate and high severity vulnerabilities. The packages have been added to `minimumReleaseAgeExclude` to allow immediate use of the patched versions, and the lockfile has been regenerated."
+}
