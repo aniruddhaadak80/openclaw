@@ -12,6 +12,8 @@ minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
   - "@openai/codex"
   - "@openai/codex-*"
+  - "fast-uri"
+  - "qs"
 
 nodeLinker: hoisted
 # GWTs share node_modules; script commands must not reconcile that shared install.
@@ -29,7 +31,7 @@ overrides:
   "@aws-sdk/xml-builder": 3.972.40
   "@hono/node-server": 2.1.1
   axios: 1.19.0
-  fast-uri: 4.1.2
+  fast-uri: 4.1.3
   follow-redirects: 1.16.0
   defu: 6.1.7
   fast-xml-parser: 5.11.0
@@ -45,7 +47,7 @@ overrides:
   "mailparser@3.9.15>html-to-text": 10.0.1
   minimatch: 10.2.6
   path-to-regexp: 8.4.2
-  qs: 6.15.3
+  qs: 6.16.0
   sharp: 0.35.3
   node-domexception: "npm:@nolyfill/domexception@1.0.28"
   typebox: 1.3.16
