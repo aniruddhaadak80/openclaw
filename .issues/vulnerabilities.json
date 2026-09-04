@@ -1,0 +1,4 @@
+{
+  "title": "Patch dependencies for fast-uri and qs",
+  "body": "Patched vulnerability in fast-uri (>=4.1.3) and qs (>=6.16.0) dependencies to fix security issues as requested by the daily routine instructions."
+}
