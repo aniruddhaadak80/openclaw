@@ -765,7 +765,11 @@ describe("config view", () => {
     // The capability refuses form submissions until the raw draft is saved or
     // discarded, so the raw actions stay on screen and Form remains gated.
     expect(container.querySelector(".config-raw-actions")).not.toBeNull();
-    expect(findButtonByText(container, "Form").disabled).toBe(true);
+    const formButton = findButtonByText(container, "Form");
+    const rawButton = findButtonByText(container, "Raw");
+    expect(formButton.disabled).toBe(true);
+    expect(formButton.getAttribute("aria-pressed")).toBe("false");
+    expect(rawButton.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("disables raw save/discard without changes and locks the editor while busy", () => {
