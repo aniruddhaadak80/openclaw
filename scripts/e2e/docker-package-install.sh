@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$ROOT_DIR/scripts/lib/docker-e2e-image.sh"
+source "$ROOT_DIR/scripts/docker/install-sh-common/version-parse.sh"
+source "$ROOT_DIR/scripts/e2e/lib/docker-package-identity.sh"
 
 IMAGE_NAME="$(docker_e2e_resolve_image "openclaw-docker-e2e-bare:local")"
 MUSL_IMAGE_NAME="openclaw-docker-e2e-musl:local"
@@ -187,14 +189,15 @@ BUN_INSTALLED_VERSION="$(
   docker exec "$BUN_PROOF_CONTAINER" \
     node -p 'JSON.parse(require("node:fs").readFileSync("/tmp/openclaw-bun-proof.json", "utf8")).openclawVersion'
 )"
+BUN_PACKAGE_ROOT="$(docker exec "$BUN_PROOF_CONTAINER" node -p 'JSON.parse(require("node:fs").readFileSync("/tmp/openclaw-bun-proof.json", "utf8")).installedPackageRoot')"
+BUN_PACKAGE_VERSION="$(docker exec "$BUN_PROOF_CONTAINER" node -p 'JSON.parse(require("node:fs").readFileSync("/tmp/openclaw-bun-proof.json", "utf8")).installedPackageVersion')"
 PACKAGE_VERSION="$(docker exec "$NPM_PROOF_CONTAINER" node -p "require('$NPM_PACKAGE_ROOT/package.json').version")"
-test "$PNPM_PACKAGE_VERSION" = "$PACKAGE_VERSION"
-for installed_version in "$NPM_INSTALLED_VERSION" "$PNPM_INSTALLED_VERSION" "$BUN_INSTALLED_VERSION"; do
-  if [[ "$installed_version" != *"$PACKAGE_VERSION"* ]]; then
-    echo "installed CLI output $installed_version does not contain package version $PACKAGE_VERSION" >&2
-    exit 1
-  fi
-done
+# Each manager proves its own installed manifest plus its own CLI output with
+# exact equality. Substring matching once let "OpenClaw 11.2.30 (wrong)" pass
+# for an expected "1.2.3" (see #127415).
+assert_docker_package_manager_identity "$PACKAGE_VERSION" "$PACKAGE_VERSION" "$NPM_INSTALLED_VERSION" "npm"
+assert_docker_package_manager_identity "$PACKAGE_VERSION" "$PNPM_PACKAGE_VERSION" "$PNPM_INSTALLED_VERSION" "pnpm"
+assert_docker_package_manager_identity "$PACKAGE_VERSION" "$BUN_PACKAGE_VERSION" "$BUN_INSTALLED_VERSION" "bun"
 
 node --import tsx "$ROOT_DIR/scripts/e2e/lib/docker-artifact-proof/write-identities.ts" \
   --scenario docker-package-install \
@@ -217,7 +220,8 @@ node --import tsx "$ROOT_DIR/scripts/e2e/lib/docker-artifact-proof/write-identit
   --detail "pnpm:openclawVersion=$PNPM_INSTALLED_VERSION" \
   --detail "pnpm:openclawPath=/tmp/pnpm-home/bin/openclaw" \
   --detail "pnpm:helpCommand=passed" \
-  --detail "bun:installedPackageVersion=$PACKAGE_VERSION" \
+  --detail "bun:installedPackageRoot=$BUN_PACKAGE_ROOT"
+  --detail "bun:installedPackageVersion=$BUN_PACKAGE_VERSION" \
   --detail "bun:openclawVersion=$BUN_INSTALLED_VERSION" \
   --detail "bun:openclawPath=$BUN_OPENCLAW_PATH" \
   --detail "bun:helpCommand=passed"
