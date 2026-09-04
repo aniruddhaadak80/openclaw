@@ -614,7 +614,7 @@ export function handleTranscriptContextMenu(event: MouseEvent, props: Transcript
       }
       nextEvent.preventDefault();
       nextEvent.stopPropagation();
-      const currentIndex = enabledItems.indexOf(document.activeElement as HTMLButtonElement);
+      const currentIndex = enabledItems.findIndex((item) => item === document.activeElement);
       let target: HTMLButtonElement | undefined;
       if (nextEvent.key === "Home" || (nextEvent.key === "ArrowDown" && currentIndex === -1)) {
         target = enabledItems[0];
