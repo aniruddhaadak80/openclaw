@@ -1,67 +1,186 @@
-// Docker package identity tests cover per-manager exact version proof.
 import { spawnSync } from "node:child_process";
-import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { useAutoCleanupTempDirTracker } from "../helpers/temp-dir.js";
 
-const BASH_BIN = process.platform === "win32" ? "bash" : "/bin/bash";
+const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 const ROOT_DIR = process.cwd();
-const PRELUDE = [
-  `source "${path.join(ROOT_DIR, "scripts/docker/install-sh-common/version-parse.sh")}"`,
-  `source "${path.join(ROOT_DIR, "scripts/e2e/lib/docker-package-identity.sh")}"`,
-].join("\n");
+const RUNNER_PATH = join(ROOT_DIR, "scripts/e2e/docker-package-install.sh");
 
-function checkIdentity(expected: string, manifest: string, cli: string, manager = "npm") {
-  return spawnSync(
-    BASH_BIN,
-    [
-      "-c",
-      `${PRELUDE}\nassert_docker_package_manager_identity "$EXPECTED_VERSION" "$MANIFEST_VERSION" "$CLI_OUTPUT" "$MANAGER"`,
-    ],
-    {
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        EXPECTED_VERSION: expected,
-        MANIFEST_VERSION: manifest,
-        CLI_OUTPUT: cli,
-        MANAGER: manager,
-      },
-    },
+type PackageIdentityOptions = {
+  artifactVersion: string;
+  bunCli?: string;
+  bunManifest?: string;
+  npmCli?: string;
+  npmManifest?: string;
+  pnpmCli?: string;
+  pnpmManifest?: string;
+};
+
+function runPackageIdentity(options: PackageIdentityOptions) {
+  const root = tempDirs.make("openclaw-docker-package-identity-");
+  const binDir = join(root, "bin");
+  const packageDir = join(root, "package");
+  const packageTgz = join(root, "candidate.tgz");
+  const identityPath = join(root, "identity.json");
+  mkdirSync(binDir);
+  mkdirSync(packageDir);
+  writeFileSync(
+    join(packageDir, "package.json"),
+    JSON.stringify({ name: "openclaw", version: options.artifactVersion }),
   );
+  const pack = spawnSync("tar", ["-czf", packageTgz, "-C", root, "package"], {
+    encoding: "utf8",
+  });
+  expect(pack.status, pack.stderr).toBe(0);
+
+  const dockerPath = join(binDir, "docker");
+  writeFileSync(
+    dockerPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+command="\${1:-}"
+shift || true
+case "$command" in
+  image|run|rm|logs)
+    exit 0
+    ;;
+  exec)
+    container="\${1:?missing container}"
+    shift
+    command_line="$*"
+    if [[ "$command_line" == "test -f /tmp/openclaw-proof-ready" ]]; then
+      exit 0
+    fi
+    if [[ "$command_line" == "cat /tmp/openclaw-package-root" ]]; then
+      printf "/fake/pnpm/openclaw"
+      exit 0
+    fi
+    if [[ "$command_line" == "cat /tmp/openclaw-version" ]]; then
+      if [[ "$container" == *npm-proof* ]]; then
+        printf "%s" "$FAKE_NPM_CLI"
+      else
+        printf "%s" "$FAKE_PNPM_CLI"
+      fi
+      exit 0
+    fi
+    if [[ "$command_line" == *"/tmp/openclaw-bun-proof.json"* ]]; then
+      case "$command_line" in
+        *installedPackageRoot*) printf "/fake/bun/openclaw" ;;
+        *installedPackageVersion*) printf "%s" "$FAKE_BUN_MANIFEST" ;;
+        *openclawVersion*) printf "%s" "$FAKE_BUN_CLI" ;;
+        *openclawPath*) printf "/fake/bun/bin/openclaw" ;;
+        *) exit 2 ;;
+      esac
+      exit 0
+    fi
+    if [[ "$command_line" == *"package.json"* ]]; then
+      if [[ "$container" == *npm-proof* ]]; then
+        printf "%s" "$FAKE_NPM_MANIFEST"
+      else
+        printf "%s" "$FAKE_PNPM_MANIFEST"
+      fi
+      exit 0
+    fi
+    exit 2
+    ;;
+  inspect)
+    reference="\${!#}"
+    printf '[{"Id":"sha256:fake","Image":"sha256:image","Name":"/%s","RepoDigests":[],"State":{"Status":"running"}}]\\n' "$reference"
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+`,
+  );
+  chmodSync(dockerPath, 0o755);
+
+  const result = spawnSync("/bin/bash", [RUNNER_PATH], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      FAKE_BUN_CLI: options.bunCli ?? `OpenClaw ${options.artifactVersion}`,
+      FAKE_BUN_MANIFEST: options.bunManifest ?? options.artifactVersion,
+      FAKE_NPM_CLI: options.npmCli ?? `OpenClaw ${options.artifactVersion}`,
+      FAKE_NPM_MANIFEST: options.npmManifest ?? options.artifactVersion,
+      FAKE_PNPM_CLI: options.pnpmCli ?? `OpenClaw ${options.artifactVersion}`,
+      FAKE_PNPM_MANIFEST: options.pnpmManifest ?? options.artifactVersion,
+      OPENCLAW_CURRENT_PACKAGE_TGZ: packageTgz,
+      OPENCLAW_DOCKER_ARTIFACT_IDENTITY_PATH: identityPath,
+      OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS: "1",
+      OPENCLAW_SKIP_DOCKER_BUILD: "1",
+      PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
+    },
+  });
+  return {
+    identity: result.status === 0 ? JSON.parse(readFileSync(identityPath, "utf8")) : undefined,
+    result,
+  };
 }
 
-describe("assert_docker_package_manager_identity", () => {
-  it("rejects a stale CLI that merely contains the expected version as a substring", () => {
-    // Regression for #127415: "OpenClaw 11.2.30 (wrong)" passed for expected "1.2.3".
-    const result = checkIdentity("1.2.3", "1.2.3", "OpenClaw 11.2.30 (wrong)");
+describe.skipIf(process.platform === "win32")("Docker package identity report", () => {
+  it("rejects installed manifests that do not match the package artifact", () => {
+    const { result } = runPackageIdentity({
+      artifactVersion: "1.2.3",
+      bunCli: "OpenClaw 11.2.30",
+      bunManifest: "11.2.30",
+      npmCli: "OpenClaw 11.2.30",
+      npmManifest: "11.2.30",
+      pnpmCli: "OpenClaw 11.2.30",
+      pnpmManifest: "11.2.30",
+    });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("parses to '11.2.30'");
+    expect(result.stderr).toContain(
+      "[npm] installed manifest version '11.2.30' != artifact '1.2.3'",
+    );
   });
 
-  it("rejects a manager manifest mismatch even when the CLI matches", () => {
-    const result = checkIdentity("1.2.3", "1.2.4", "OpenClaw 1.2.3", "pnpm");
+  it("rejects a stale CLI version that only contains the artifact version as a substring", () => {
+    const { result } = runPackageIdentity({
+      artifactVersion: "1.2.3",
+      npmCli: "OpenClaw 11.2.30 (wrong)",
+    });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("[pnpm] installed manifest version '1.2.4'");
+    expect(result.stderr).toContain("[npm] CLI output parses to '11.2.30'");
   });
 
-  it("rejects unparseable CLI output", () => {
-    const result = checkIdentity("1.2.3", "1.2.3", "starting service...");
+  it("emits complete manager-owned identity for an exact prerelease", () => {
+    const version = "2026.6.21-beta.1+build.7";
+    const { identity, result } = runPackageIdentity({ artifactVersion: version });
 
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("<unparseable>");
-  });
-
-  it("accepts exact manifest and CLI identity, including prerelease builds", () => {
-    expect(checkIdentity("1.2.3", "1.2.3", "OpenClaw 1.2.3").status).toBe(0);
-    expect(
-      checkIdentity(
-        "2026.6.21-beta.1+build.7",
-        "2026.6.21-beta.1+build.7",
-        "OpenClaw v2026.6.21-beta.1+build.7",
-        "bun",
-      ).status,
-    ).toBe(0);
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(identity).toEqual(
+      expect.objectContaining({
+        package: expect.objectContaining({ version }),
+        containers: expect.arrayContaining([
+          expect.objectContaining({
+            role: "npm",
+            details: expect.objectContaining({
+              installedPackageVersion: version,
+              parsedOpenclawVersion: version,
+            }),
+          }),
+          expect.objectContaining({
+            role: "pnpm",
+            details: expect.objectContaining({
+              installedPackageVersion: version,
+              parsedOpenclawVersion: version,
+            }),
+          }),
+          expect.objectContaining({
+            role: "bun",
+            details: expect.objectContaining({
+              installedPackageRoot: "/fake/bun/openclaw",
+              installedPackageVersion: version,
+              parsedOpenclawVersion: version,
+            }),
+          }),
+        ]),
+      }),
+    );
   });
 });
