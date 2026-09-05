@@ -491,6 +491,10 @@ describe("active-memory plugin", () => {
     vi
       .mocked(api.logger.debug)
       .mock.calls.some((call: unknown[]) => String(call[0]).includes(needle));
+  const hasInfoLine = (needle: string) =>
+    vi
+      .mocked(api.logger.info)
+      .mock.calls.some((call: unknown[]) => String(call[0]).includes(needle));
   const hasWarnLine = (needle: string) =>
     vi
       .mocked(api.logger.warn)
@@ -1707,7 +1711,17 @@ describe("active-memory plugin", () => {
 
     expectPrependContextContains(result, skippedRecallContext);
     expect(runEmbeddedAgent).not.toHaveBeenCalled();
-    expect(hasDebugLine("active-memory: recall skipped reason=no-recall-intent")).toBe(true);
+    expect(hasInfoLine("active-memory: recall skipped reason=no-recall-intent")).toBe(true);
+  });
+
+  it("logs an info skip line when the prompt has no turn tool authority", async () => {
+    // Regression for #138561: "did not run at all" must stay distinguishable
+    // from "ran and found nothing relevant" without enabling debug.
+    const result = await runPromptBuild({ prompt: "hello" }, { toolAuthority: undefined });
+
+    expect(result).toBeUndefined();
+    expect(runEmbeddedAgent).not.toHaveBeenCalled();
+    expect(hasInfoLine("active-memory: recall skipped reason=no-tool-authority")).toBe(true);
   });
 
   it("does not run deep recall when the live active-memory plugin entry is removed", async () => {

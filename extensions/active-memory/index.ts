@@ -209,9 +209,9 @@ export default definePluginEntry({
       async (event, ctx) => {
         const toolAuthority = ctx.toolAuthority;
         if (!toolAuthority) {
-          api.logger.debug?.(
-            "active-memory: recall skipped because this prompt has no turn tool authority",
-          );
+          // Info, not debug: "did not run at all" must stay distinguishable
+          // from "ran and found nothing relevant" (see #138561).
+          api.logger.info?.("active-memory: recall skipped reason=no-tool-authority");
           return undefined;
         }
         toolAuthority.assertActive();
@@ -289,6 +289,7 @@ export default definePluginEntry({
                 sessionKey: resolvedSessionKey,
                 statusLine: `${ACTIVE_MEMORY_STATUS_PREFIX} status=policy-disabled`,
               });
+              api.logger.info?.("active-memory: recall skipped reason=policy-disabled");
               toolAuthority.assertActive();
               return undefined;
             }
@@ -299,6 +300,7 @@ export default definePluginEntry({
                 sessionKey: resolvedSessionKey,
               })
             ) {
+              api.logger.info?.("active-memory: recall skipped reason=harness-session");
               return undefined;
             }
             const sessionDisabled = await isSessionActiveMemoryDisabled({
@@ -313,6 +315,7 @@ export default definePluginEntry({
                 agentId: effectiveAgentId,
                 sessionKey: resolvedSessionKey,
               });
+              api.logger.info?.("active-memory: recall skipped reason=session-disabled");
               return undefined;
             }
             const sessionContext = {
@@ -325,6 +328,7 @@ export default definePluginEntry({
                 agentId: effectiveAgentId,
                 sessionKey: resolvedSessionKey,
               });
+              api.logger.info?.("active-memory: recall skipped reason=ineligible-session");
               return undefined;
             }
             const destinationContext = {
@@ -422,6 +426,7 @@ export default definePluginEntry({
                 agentId: effectiveAgentId,
                 sessionKey: resolvedSessionKey,
               });
+              api.logger.info?.("active-memory: recall skipped reason=lane-not-allowed");
               return laneOneContext ? { prependContext: laneOneContext } : undefined;
             }
             const escalationDecision = resolveRecallEscalationDecision({
@@ -430,7 +435,7 @@ export default definePluginEntry({
               hasStrongLaneOneHit: laneOne.hasStrongHit,
             });
             if (escalationDecision !== "recall") {
-              api.logger.debug?.(`active-memory: recall skipped reason=${escalationDecision}`);
+              api.logger.info?.(`active-memory: recall skipped reason=${escalationDecision}`);
               const outcomeContext =
                 escalationDecision === "no-recall-intent"
                   ? buildRecallOutcomePrefix("skipped-no-recall-intent")
