@@ -58,10 +58,12 @@ case "$command" in
       exit 0
     fi
     if [[ "$command_line" == "cat /tmp/openclaw-version" ]]; then
-      if [[ "$container" == *npm-proof* ]]; then
+      if [[ "$container" == *-npm-proof-* ]]; then
         printf "%s" "$FAKE_NPM_CLI"
-      else
+      elif [[ "$container" == *-pnpm-proof-* ]]; then
         printf "%s" "$FAKE_PNPM_CLI"
+      else
+        exit 2
       fi
       exit 0
     fi
@@ -76,10 +78,12 @@ case "$command" in
       exit 0
     fi
     if [[ "$command_line" == *"package.json"* ]]; then
-      if [[ "$container" == *npm-proof* ]]; then
+      if [[ "$container" == *-npm-proof-* ]]; then
         printf "%s" "$FAKE_NPM_MANIFEST"
-      else
+      elif [[ "$container" == *-pnpm-proof-* ]]; then
         printf "%s" "$FAKE_PNPM_MANIFEST"
+      else
+        exit 2
       fi
       exit 0
     fi
@@ -146,6 +150,28 @@ describe.skipIf(process.platform === "win32")("Docker package identity report", 
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("[npm] CLI output parses to '11.2.30'");
+  });
+
+  it("rejects a pnpm manifest version that differs from the artifact", () => {
+    const { result } = runPackageIdentity({
+      artifactVersion: "1.2.3",
+      pnpmManifest: "11.2.30",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "[pnpm] installed manifest version '11.2.30' != artifact '1.2.3'",
+    );
+  });
+
+  it("rejects a pnpm CLI version that differs from the artifact", () => {
+    const { result } = runPackageIdentity({
+      artifactVersion: "1.2.3",
+      pnpmCli: "OpenClaw 11.2.30 (wrong)",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("[pnpm] CLI output parses to '11.2.30'");
   });
 
   it("emits complete manager-owned identity for an exact prerelease", () => {
