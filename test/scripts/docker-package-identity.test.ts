@@ -174,6 +174,28 @@ describe.skipIf(process.platform === "win32")("Docker package identity report", 
     expect(result.stderr).toContain("[pnpm] CLI output parses to '11.2.30'");
   });
 
+  it("rejects a Bun manifest version that differs from the artifact", () => {
+    const { result } = runPackageIdentity({
+      artifactVersion: "1.2.3",
+      bunManifest: "11.2.30",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "[bun] installed manifest version '11.2.30' != artifact '1.2.3'",
+    );
+  });
+
+  it("rejects a Bun CLI version that differs from the artifact", () => {
+    const { result } = runPackageIdentity({
+      artifactVersion: "1.2.3",
+      bunCli: "OpenClaw 11.2.30 (wrong)",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("[bun] CLI output parses to '11.2.30'");
+  });
+
   it("emits complete manager-owned identity for an exact prerelease", () => {
     const version = "2026.6.21-beta.1+build.7";
     const { identity, result } = runPackageIdentity({ artifactVersion: version });
