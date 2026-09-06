@@ -1,0 +1,53 @@
+name: Sync Fork and Patch Vulnerabilities
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Sync Fork
+        run: |
+          gh repo sync ${{ github.repository }} --branch main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  vulnerability-scan:
+    needs: sync
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22.22.3
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.15.1
+
+      - name: Run npm audit
+        run: |
+          pnpm audit --fix || echo "Audit completed with findings"
+
+      - name: Commit and Create PR
+        uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: patch vulnerabilities"
+          title: "chore: patch vulnerabilities"
+          body: "Automated PR to patch vulnerabilities found in the upstream sync."
+          branch: "patch-vulnerabilities"
