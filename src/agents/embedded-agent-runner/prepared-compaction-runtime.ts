@@ -221,7 +221,7 @@ export async function buildPreparedCompactionRuntime(prepared: DirectCompactionP
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
     const resolvedMessageProvider = params.messageChannel ?? params.messageProvider;
-    const contextInjectionMode = resolveContextInjectionMode(params.config, effectiveSkillAgentId);
+    const contextInjectionMode = resolveContextInjectionMode(params.config, sessionAgentId);
     const bootstrapWarn = makeBootstrapWarn({
       sessionLabel,
       warn: (message) => log.warn(message),
@@ -238,7 +238,7 @@ export async function buildPreparedCompactionRuntime(prepared: DirectCompactionP
             sessionKey: params.sessionKey,
             sessionId: params.sessionId,
             chatType: params.chatType,
-            agentId: effectiveSkillAgentId,
+            agentId: sessionAgentId,
             warn: bootstrapWarn,
           });
     // Compaction must mirror the live-turn contract: when aggregate budget exhausts,
@@ -251,7 +251,7 @@ export async function buildPreparedCompactionRuntime(prepared: DirectCompactionP
     });
     const bootstrapBudget = buildBootstrapBudgetState({
       config: params.config,
-      agentId: effectiveSkillAgentId,
+      agentId: sessionAgentId,
       files: bootstrapInjectionStats,
     });
     const bootstrapTruncationNotice = buildBootstrapPromptWarningNotice(
