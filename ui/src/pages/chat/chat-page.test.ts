@@ -175,22 +175,6 @@ function setViewerPresenceContext(page: ChatPage) {
   return { ...navigation, request };
 }
 
-function stubMatchMedia(matches: boolean) {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn((query: string) => ({
-      matches,
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  );
-}
-
 describe("chat page split layout host", () => {
   beforeEach(() => {
     nativeGateways.current = null;
