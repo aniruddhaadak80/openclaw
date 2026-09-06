@@ -1,0 +1,4 @@
+{
+  "title": "chore(security): bump qs to 6.16.0",
+  "body": "Bumps `qs` to `6.16.0` to address GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g."
+}
