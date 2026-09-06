@@ -1,0 +1,4 @@
+{
+  "title": "Security Vulnerabilities in dependencies: qs, fast-uri",
+  "body": "Security vulnerabilities were found after syncing with the main repo during `pnpm audit`.\n\n### qs\n- Vulnerability: qs array-limit bypass via bracket-key comma parsing (CWE-770)\n- Vulnerable versions: >=6.14.2 <=6.15.3\n- Patched versions: >=6.16.0\n- Severity: Moderate\n\n### fast-uri\n- Vulnerability: Multiple vulnerabilities including server-side request forgery (SSRF) and host confusion (CWE-436, CWE-20, CWE-918, CWE-174, CWE-177)\n- Vulnerable versions: >=4.0.0 <4.1.3\n- Patched versions: >=4.1.3\n- Severity: High"
+}
