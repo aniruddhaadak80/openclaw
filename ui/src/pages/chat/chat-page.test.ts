@@ -1,7 +1,6 @@
 /* @vitest-environment jsdom */
 /* @vitest-environment-options {"url":"http://chat-page.test/"} */
 
-import { expectDefined } from "@openclaw/normalization-core";
 import type { RouteLocation } from "@openclaw/uirouter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,7 +30,14 @@ import {
 import { SESSION_DRAG_MIME } from "../../lib/sessions/drag.ts";
 import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
 import { createStorageMock } from "../../test-helpers/storage.ts";
-import { createChatPageSessions } from "./chat-page.test-support.ts";
+import {
+  createChatPageSessions,
+  createSplitLayout,
+  itemAt,
+  setLayout,
+  setNavigationContext,
+  stubMatchMedia,
+} from "./chat-page.test-support.ts";
 import { ChatPage } from "./chat-page.ts";
 import { loadChatRoute } from "./route-loader.ts";
 
@@ -48,7 +54,6 @@ const sessionPath = (sessionKey: string) =>
 import type { ChatMessageCache } from "./session-message-cache.ts";
 import type { SplitDropZone } from "./split-drop-zone.ts";
 import type { ChatSplitLayout } from "./split-layout-types.ts";
-import { insertPane } from "./split-layout.ts";
 
 type RenderedPane = HTMLElement & {
   paneId: string;
@@ -93,23 +98,6 @@ function createSessionTitleSource() {
   };
 }
 
-function createSplitLayout(sessionKey: string): ChatSplitLayout {
-  const singlePane: ChatSplitLayout = {
-    columns: [{ id: "c1", panes: [{ id: "p1", sessionKey }], paneWeights: [1] }],
-    columnWeights: [1],
-    activePaneId: "p1",
-  };
-  return insertPane(singlePane, "p1", sessionKey, "right");
-}
-
-function itemAt<T>(items: ArrayLike<T>, index: number, label: string): T {
-  return expectDefined(items[index], `${label} ${index}`);
-}
-
-function setLayout(page: ChatPage, layout: ChatSplitLayout | undefined) {
-  (page as unknown as { layout: ChatSplitLayout | undefined }).layout = layout;
-}
-
 function getLayout(page: ChatPage): ChatSplitLayout | undefined {
   return (page as unknown as { layout: ChatSplitLayout | undefined }).layout;
 }
@@ -141,38 +129,6 @@ function getDropIndicator(page: ChatPage) {
       dropIndicator: { paneId: string; zone: SplitDropZone } | null;
     }
   ).dropIndicator;
-}
-
-function setNavigationContext(page: ChatPage) {
-  const navigate = vi.fn();
-  const replace = vi.fn();
-  const patch = vi.fn(async () => null);
-  const agentSelectionState = { selectedId: "main" };
-  const setAgent = vi.fn((agentId: string) => {
-    agentSelectionState.selectedId = agentId;
-  });
-  const chatAttachmentHandoff = {
-    prepare: vi.fn(),
-    consume: vi.fn(() => null),
-    clearPane: vi.fn(),
-    dispose: vi.fn(),
-  };
-  const context = {
-    basePath: "",
-    sessions: { ...createChatPageSessions(), patch },
-    agents: { state: { agentsList: { defaultId: "main", mainKey: "main" } } },
-    gateway: {
-      snapshot: { hello: null },
-      setSessionKey: vi.fn(),
-      subscribe: () => () => undefined,
-    },
-    navigate,
-    replace,
-    agentSelection: { state: agentSelectionState, set: setAgent },
-    chatAttachmentHandoff,
-  } as unknown as ApplicationContext;
-  (page as unknown as { context: ApplicationContext }).context = context;
-  return { chatAttachmentHandoff, context, navigate, replace, setAgent, patch };
 }
 
 function setViewerPresenceContext(page: ChatPage) {
@@ -353,69 +309,6 @@ describe("chat page split layout host", () => {
     );
     expect(survivingPane).toBe(classicPane);
     expect(survivingPane.classList.contains("chat-split-view__pane")).toBe(false);
-  });
-
-  it("moves focus to the surviving pane composer when closing the focused pane", async () => {
-    const page = new ChatPage();
-    setNavigationContext(page);
-    page.data = { sessionKey: "main" };
-    document.body.append(page);
-    setLayout(page, createSplitLayout("main"));
-    await page.updateComplete;
-
-    const panes = [...page.querySelectorAll<RenderedPane>("openclaw-chat-pane")];
-    expect(panes).toHaveLength(2);
-    for (const pane of panes) {
-      const wrap = document.createElement("div");
-      wrap.className = "agent-chat__composer-combobox";
-      wrap.append(document.createElement("textarea"));
-      pane.append(wrap);
-    }
-    const survivingPane = itemAt(panes, 0, "surviving pane");
-    const closingPane = itemAt(panes, 1, "closing pane");
-    const survivingTextarea = survivingPane.querySelector("textarea") as HTMLTextAreaElement;
-    const closingTextarea = closingPane.querySelector("textarea") as HTMLTextAreaElement;
-    const focusSpy = vi.spyOn(survivingTextarea, "focus");
-
-    closingTextarea.focus();
-    closingPane.onClosePane?.(closingPane.paneId);
-    await page.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
-    page.remove();
-  });
-
-  it("leaves focus alone when closing a pane that does not own focus", async () => {
-    const page = new ChatPage();
-    setNavigationContext(page);
-    page.data = { sessionKey: "main" };
-    document.body.append(page);
-    setLayout(page, createSplitLayout("main"));
-    await page.updateComplete;
-
-    const panes = [...page.querySelectorAll<RenderedPane>("openclaw-chat-pane")];
-    expect(panes).toHaveLength(2);
-    for (const pane of panes) {
-      const wrap = document.createElement("div");
-      wrap.className = "agent-chat__composer-combobox";
-      wrap.append(document.createElement("textarea"));
-      pane.append(wrap);
-    }
-    const survivingPane = itemAt(panes, 0, "surviving pane");
-    const closingPane = itemAt(panes, 1, "closing pane");
-    const focusSpy = vi.spyOn(
-      survivingPane.querySelector("textarea") as HTMLTextAreaElement,
-      "focus",
-    );
-
-    document.body.focus();
-    closingPane.onClosePane?.(closingPane.paneId);
-    await page.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(focusSpy).not.toHaveBeenCalled();
-    page.remove();
   });
 
   it("applies mounted UI split, focus, and close commands", () => {
