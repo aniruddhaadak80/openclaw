@@ -1,0 +1,4 @@
+{
+  "title": "qs: Denial of Service via Attacker Controlled isBuffer",
+  "body": "Module: qs\nSeverity: moderate\nVulnerable versions: >=2.2.5 <6.16.0\nPatched versions: >=6.16.0\nURL: https://github.com/advisories/GHSA-4mjr-xmp4-gh2g"
+}

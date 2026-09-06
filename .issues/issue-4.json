@@ -1,0 +1,4 @@
+{
+  "title": "fast-uri vulnerable to server-side request forgery via malformed IPv6 normalization",
+  "body": "Module: fast-uri\nSeverity: high\nVulnerable versions: >=4.0.0 <4.1.3\nPatched versions: >=4.1.3\nURL: https://github.com/advisories/GHSA-f65p-4m7j-42xc"
+}
