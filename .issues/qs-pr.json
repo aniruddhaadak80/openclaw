@@ -1,0 +1,4 @@
+{
+  "title": "fix(deps): update qs to 6.16.0 to fix vulnerabilities",
+  "body": "Updates the `qs` dependency to `6.16.0` to address denial of service and array-limit bypass vulnerabilities (GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g)."
+}
