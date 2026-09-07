@@ -1,0 +1,4 @@
+{
+  "title": "chore: Update qs to 6.16.0 to fix security vulnerabilities",
+  "body": "This PR updates the `qs` package to version 6.16.0 in `pnpm-workspace.yaml` overrides to fix moderate security vulnerabilities (GHSA-x5fp-wj9c-mxmx, GHSA-4mjr-xmp4-gh2g). The updated package is also excluded from `minimumReleaseAge` policies to allow the fix to be applied immediately."
+}
