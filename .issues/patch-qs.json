@@ -1,0 +1,4 @@
+{
+  "title": "chore(deps): bump qs to 6.16.0",
+  "body": "Bumps [qs](https://github.com/ljharb/qs) to address vulnerabilities:\n- GHSA-x5fp-wj9c-mxmx (CWE-770): qs array-limit bypass via bracket-key comma parsing\n- GHSA-4mjr-xmp4-gh2g (CWE-248, CWE-703): qs: Denial of Service via Attacker Controlled isBuffer\n\nPatches applied via pnpm overrides."
+}
