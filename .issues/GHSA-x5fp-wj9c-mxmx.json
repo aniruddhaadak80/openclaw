@@ -1,0 +1,1 @@
+{"title":"Vulnerability found: qs array-limit bypass via bracket-key comma parsing (GHSA-x5fp-wj9c-mxmx)", "body":"Module: qs\nVulnerable versions: >=6.14.2 <=6.15.3\nPatched versions: >=6.16.0"}

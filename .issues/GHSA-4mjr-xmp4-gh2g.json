@@ -1,0 +1,1 @@
+{"title":"Vulnerability found: qs: Denial of Service via Attacker Controlled isBuffer (GHSA-4mjr-xmp4-gh2g)", "body":"Module: qs\nVulnerable versions: >=2.2.5 <6.16.0\nPatched versions: >=6.16.0"}
