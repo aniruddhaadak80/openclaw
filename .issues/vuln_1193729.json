@@ -1,0 +1,4 @@
+{
+  "title": "Security vulnerability in hono: Hono: Incomplete fix for CVE-2026-39408: `toSSG()` still writes files outside the output directory",
+  "body": "A security vulnerability was found in module `hono`.\n\n- Vulnerable versions: <4.13.5\n- Patched versions: >=4.13.5\n- Advisory ID: 1193729\n\nPlease update the dependency to a patched version."
+}

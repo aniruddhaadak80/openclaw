@@ -1,0 +1,4 @@
+{
+  "title": "Security vulnerability in js-yaml: js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+  "body": "A security vulnerability was found in module `js-yaml`.\n\n- Vulnerable versions: >=4.0.0 <4.3.2\n- Patched versions: >=4.3.2\n- Advisory ID: 1193727\n\nPlease update the dependency to a patched version."
+}

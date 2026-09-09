@@ -1,0 +1,4 @@
+{
+  "title": "Security vulnerability in joi: joi: Prototype pollution via a `__proto__` language key in custom messages",
+  "body": "A security vulnerability was found in module `joi`.\n\n- Vulnerable versions: >=18.0.0 <18.2.5\n- Patched versions: >=18.2.5\n- Advisory ID: 1193672\n\nPlease update the dependency to a patched version."
+}

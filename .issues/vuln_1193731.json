@@ -1,0 +1,4 @@
+{
+  "title": "Security vulnerability in hono: Hono: Query parser reads parameters after the URL fragment, causing cache-key and proxy interpretation differentials",
+  "body": "A security vulnerability was found in module `hono`.\n\n- Vulnerable versions: <4.13.5\n- Patched versions: >=4.13.5\n- Advisory ID: 1193731\n\nPlease update the dependency to a patched version."
+}

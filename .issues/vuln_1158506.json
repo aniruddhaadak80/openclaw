@@ -1,0 +1,4 @@
+{
+  "title": "Security vulnerability in qs: qs array-limit bypass via bracket-key comma parsing",
+  "body": "A security vulnerability was found in module `qs`.\n\n- Vulnerable versions: >=6.14.2 <=6.15.3\n- Patched versions: >=6.16.0\n- Advisory ID: 1158506\n\nPlease update the dependency to a patched version."
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Security vulnerability in joi: joi: object().rename() with a template target can set the validated object's prototype",
+  "body": "A security vulnerability was found in module `joi`.\n\n- Vulnerable versions: >=18.0.0 <18.2.4\n- Patched versions: >=18.2.4\n- Advisory ID: 1193678\n\nPlease update the dependency to a patched version."
+}

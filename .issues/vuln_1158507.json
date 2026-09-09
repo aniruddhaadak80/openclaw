@@ -1,0 +1,4 @@
+{
+  "title": "Security vulnerability in qs: qs: Denial of Service via Attacker Controlled isBuffer",
+  "body": "A security vulnerability was found in module `qs`.\n\n- Vulnerable versions: >=2.2.5 <6.16.0\n- Patched versions: >=6.16.0\n- Advisory ID: 1158507\n\nPlease update the dependency to a patched version."
+}
