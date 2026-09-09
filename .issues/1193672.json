@@ -1,0 +1,4 @@
+{
+  "title": "joi: Prototype pollution via a `__proto__` language key in custom messages",
+  "body": "Patched `joi` to `>=18.2.5` to address GHSA-6w3j-5fw6-r9vr."
+}

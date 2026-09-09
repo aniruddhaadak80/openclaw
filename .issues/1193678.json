@@ -1,0 +1,4 @@
+{
+  "title": "joi: object().rename() with a template target can set the validated object's prototype",
+  "body": "Patched `joi` to `>=18.2.4` to address GHSA-gg4h-3hg2-grpc."
+}

@@ -1,0 +1,4 @@
+{
+  "title": "qs array-limit bypass via bracket-key comma parsing",
+  "body": "Patched `qs` to `>=6.16.0` to address GHSA-x5fp-wj9c-mxmx."
+}
