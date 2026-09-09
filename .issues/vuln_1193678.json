@@ -1,0 +1,4 @@
+{
+  "title": "Fix joi vulnerability (GHSA-gg4h-3hg2-grpc)",
+  "body": "This PR updates joi to >=18.2.4 (using 18.2.5) to fix GHSA-gg4h-3hg2-grpc (CWE-1321)."
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Fix qs vulnerability (GHSA-x5fp-wj9c-mxmx)",
+  "body": "This PR updates qs to >=6.16.0 to fix GHSA-x5fp-wj9c-mxmx (CWE-770)."
+}

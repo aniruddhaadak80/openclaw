@@ -1,0 +1,4 @@
+{
+  "title": "Fix joi vulnerability (GHSA-6w3j-5fw6-r9vr)",
+  "body": "This PR updates joi to >=18.2.5 to fix GHSA-6w3j-5fw6-r9vr (CWE-1321)."
+}

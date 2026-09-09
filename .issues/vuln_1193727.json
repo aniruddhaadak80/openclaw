@@ -1,0 +1,4 @@
+{
+  "title": "Fix js-yaml vulnerability (GHSA-2883-xcg3-v3hh)",
+  "body": "This PR updates js-yaml to >=4.3.2 to fix GHSA-2883-xcg3-v3hh (CWE-400, CWE-407)."
+}

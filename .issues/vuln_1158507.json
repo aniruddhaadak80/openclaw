@@ -1,0 +1,4 @@
+{
+  "title": "Fix qs vulnerability (GHSA-4mjr-xmp4-gh2g)",
+  "body": "This PR updates qs to >=6.16.0 to fix GHSA-4mjr-xmp4-gh2g (CWE-248, CWE-703)."
+}

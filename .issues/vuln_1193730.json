@@ -1,0 +1,4 @@
+{
+  "title": "Fix hono vulnerability (GHSA-g6gw-c38x-mqfc)",
+  "body": "This PR updates hono to >=4.13.5 to fix GHSA-g6gw-c38x-mqfc (CWE-400)."
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Fix hono vulnerability (GHSA-gqvv-2mrq-wpjv)",
+  "body": "This PR updates hono to >=4.13.5 to fix GHSA-gqvv-2mrq-wpjv (CWE-22)."
+}

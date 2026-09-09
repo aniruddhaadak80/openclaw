@@ -1,0 +1,4 @@
+{
+  "title": "Fix hono vulnerability (GHSA-crvj-82cr-hjcx)",
+  "body": "This PR updates hono to >=4.13.5 to fix GHSA-crvj-82cr-hjcx (CWE-444)."
+}
