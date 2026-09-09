@@ -60,6 +60,49 @@ import {
 } from "./thread-ownership.js";
 import { CodexIncognitoPolicyChangeError } from "./thread-policy.js";
 
+function twoStartsThenResumeMethods(): string[] {
+  return [
+    "config/read",
+    "configRequirements/read",
+    "thread/start",
+    "thread/unsubscribe",
+    "config/read",
+    "configRequirements/read",
+    "thread/start",
+    "thread/unsubscribe",
+    "config/read",
+    "configRequirements/read",
+    "thread/read",
+    "thread/resume",
+    "thread/inject_items",
+  ];
+}
+
+function createSequentialLifecycleHarness(
+  resume: (requestParams?: unknown) => ReturnType<typeof threadStartResult>,
+) {
+  let starts = 0;
+  return createLeasedCodexLifecycleHarness({
+    agentDir: path.join(tempDir, "agent"),
+    respond: async (method: string, requestParams?: unknown) => {
+      if (method === "config/read") {
+        return { config: {}, origins: {}, layers: [] };
+      }
+      if (method === "configRequirements/read") {
+        return { requirements: null };
+      }
+      if (method === "thread/start") {
+        starts += 1;
+        return threadStartResult(`thread-${starts}`);
+      }
+      if (method === "thread/resume") {
+        return resume(requestParams);
+      }
+      throw new Error(`unexpected method: ${method}`);
+    },
+  });
+}
+
 function startOrResumeThread(
   params: Omit<Parameters<typeof startOrResumeThreadImpl>[0], "bindingStore">,
 ) {
@@ -326,6 +369,7 @@ function createTwoCalendarAppPolicyContext() {
 async function createManualResumeFixture(
   options: {
     active?: boolean;
+    systemError?: boolean;
     cold?: boolean;
     receipt?: "none" | "stale" | "unrelated" | "malformed";
     dynamicTools?: CodexDynamicToolFunctionSpec[];
@@ -390,7 +434,7 @@ async function createManualResumeFixture(
             : {}),
           status: options.active
             ? { type: "active", activeFlags: [] }
-            : { type: options.cold ? "notLoaded" : "idle" },
+            : { type: options.cold ? "notLoaded" : options.systemError ? "systemError" : "idle" },
         },
       };
     }
@@ -404,7 +448,12 @@ async function createManualResumeFixture(
       if (resumes > 0 && options.competingLease === "resume") {
         compete();
       }
-      if (resumes++ > 0 && options.receipt !== "none" && options.receipt !== "stale") {
+      if (
+        resumes++ > 0 &&
+        !options.systemError &&
+        options.receipt !== "none" &&
+        options.receipt !== "stale"
+      ) {
         await harness.notify({
           method: "thread/status/changed",
           params: {
@@ -1002,14 +1051,22 @@ describe("Codex app-server thread lifecycle bindings", () => {
     },
   );
 
-  it.each(["initial policy", "replacement policy", ""])(
-    "keeps ordinary warm configuration honest across policy %j",
-    async (developerInstructions) => {
+  it.each(
+    ["idle", "systemError"].flatMap((nativeStatus) =>
+      ["initial policy", "replacement policy", ""].map((developerInstructions) => ({
+        nativeStatus,
+        developerInstructions,
+      })),
+    ),
+  )(
+    "keeps ordinary warm configuration honest across $nativeStatus and policy $developerInstructions",
+    async ({ nativeStatus, developerInstructions }) => {
       const sessionFile = path.join(tempDir, "ordinary-warm-policy.jsonl");
       const workspaceDir = path.join(tempDir, "workspace");
       const threadId = "ordinary-warm-policy";
       const response = threadStartResult(threadId);
       const methods: string[] = [];
+      let subscribed = true;
       const wire = await createLeasedLifecycleWireClient(path.join(tempDir, "agent"), (request) => {
         methods.push(request.method);
         if (request.method === "config/read") {
@@ -1019,16 +1076,20 @@ describe("Codex app-server thread lifecycle bindings", () => {
           return { requirements: null };
         }
         if (request.method === "thread/start" || request.method === "thread/resume") {
+          if (!subscribed && nativeStatus === "idle") {
+            wire.send({
+              method: "thread/status/changed",
+              params: { threadId, status: { type: "notLoaded" } },
+            });
+          }
+          subscribed = true;
           return response;
         }
         if (request.method === "thread/read") {
-          return { thread: response.thread };
+          return { thread: { ...response.thread, status: { type: nativeStatus } } };
         }
         if (request.method === "thread/unsubscribe") {
-          wire.send({
-            method: "thread/status/changed",
-            params: { threadId, status: { type: "notLoaded" } },
-          });
+          subscribed = false;
           return { status: "unsubscribed" };
         }
         if (request.method === "thread/inject_items") {
@@ -1059,7 +1120,14 @@ describe("Codex app-server thread lifecycle bindings", () => {
           undefined,
           first.liveThreadConfigFingerprint,
         );
-        const second = await startOrResumeThread({ ...common, developerInstructions });
+        const resume = startOrResumeThread({ ...common, developerInstructions });
+        if (nativeStatus === "systemError" && developerInstructions !== "initial policy") {
+          await expect(resume).rejects.toThrow("did not confirm unloading");
+          expect(methods).not.toContain("thread/inject_items");
+          expect((await readCodexAppServerBinding(sessionFile))?.threadId).toBe(first.threadId);
+          return;
+        }
+        const second = await resume;
         expect(second.threadId).toBe(first.threadId);
         expect(methods).toEqual(
           developerInstructions === "initial policy"
@@ -1759,6 +1827,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
   );
 
   it.each([
+    { options: { systemError: true, wireClient: true }, error: "did not confirm unloading" },
     { options: { receipt: "none" as const }, error: "did not confirm unloading" },
     { options: { receipt: "unrelated" as const }, error: "did not confirm unloading" },
     { options: { receipt: "stale" as const }, error: "did not confirm unloading" },
@@ -2534,7 +2603,10 @@ describe("Codex app-server thread lifecycle bindings", () => {
         return { requirements: null };
       }
       if (method === "thread/start" || method === "thread/resume") {
-        return threadStartResult("thread-warm-provider");
+        return {
+          ...threadStartResult("thread-warm-provider"),
+          ...(method === "thread/resume" ? { modelProvider: "custom-provider" } : {}),
+        };
       }
       throw new Error(`unexpected method: ${method}`);
     });
@@ -3037,7 +3109,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
             },
             web_search: "disabled",
           }),
-          developerInstructions: expect.stringContaining("`message(action=send)`"),
+          developerInstructions: expect.not.stringContaining("`message(action=send)`"),
         }),
       );
       const typedThreadRequest = threadRequest as {
@@ -4583,27 +4655,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     const params = createParams(sessionFile, workspaceDir);
     params.disableTools = false;
     const appServer = createThreadLifecycleAppServerOptions();
-    let starts = 0;
-    const respond = vi.fn(async (method: string, _params?: unknown) => {
-      if (method === "config/read") {
-        return { config: {}, origins: {}, layers: [] };
-      }
-      if (method === "configRequirements/read") {
-        return { requirements: null };
-      }
-      if (method === "thread/start") {
-        starts += 1;
-        return threadStartResult(`thread-${starts}`);
-      }
-      if (method === "thread/resume") {
-        return threadStartResult("thread-1");
-      }
-      throw new Error(`unexpected method: ${method}`);
-    });
-    const fixture = await createLeasedCodexLifecycleHarness({
-      agentDir: path.join(tempDir, "agent"),
-      respond,
-    });
+    const fixture = await createSequentialLifecycleHarness(() => threadStartResult("thread-1"));
     const { client, request } = fixture;
 
     await startOrResumeThread({
@@ -4640,21 +4692,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     expect(restrictedBinding).not.toHaveProperty("liveThreadConfigFingerprint");
     expect(savedAfterRestriction?.threadId).toBe("thread-1");
     expect(resumedBinding.threadId).toBe("thread-1");
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/read",
-      "thread/resume",
-      "thread/inject_items",
-    ]);
+    expect(request.mock.calls.map(([method]) => method)).toEqual(twoStartsThenResumeMethods());
     expect(request.mock.calls.find(([method]) => method === "thread/start")?.[1]).toMatchObject({
       config: { web_search: "cached" },
     });
@@ -4761,27 +4799,9 @@ describe("Codex app-server thread lifecycle bindings", () => {
     const workspaceDir = path.join(tempDir, "workspace");
     const params = createParams(sessionFile, workspaceDir);
     const appServer = createThreadLifecycleAppServerOptions();
-    let starts = 0;
-    const respond = vi.fn(async (method: string, requestParams?: unknown) => {
-      if (method === "config/read") {
-        return { config: {}, origins: {}, layers: [] };
-      }
-      if (method === "configRequirements/read") {
-        return { requirements: null };
-      }
-      if (method === "thread/start") {
-        starts += 1;
-        return threadStartResult(`thread-${starts}`);
-      }
-      if (method === "thread/resume") {
-        return threadStartResult((requestParams as { threadId: string }).threadId);
-      }
-      throw new Error(`unexpected method: ${method}`);
-    });
-    const fixture = await createLeasedCodexLifecycleHarness({
-      agentDir: path.join(tempDir, "agent"),
-      respond,
-    });
+    const fixture = await createSequentialLifecycleHarness((requestParams) =>
+      threadStartResult((requestParams as { threadId: string }).threadId),
+    );
     const { client, request } = fixture;
 
     await startOrResumeThread({
@@ -4819,21 +4839,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     expect(transientBinding).not.toHaveProperty("liveThreadConfigFingerprint");
     expect(savedAfterUnknownSupport?.threadId).toBe("thread-1");
     expect(resumedBinding.threadId).toBe("thread-1");
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/read",
-      "thread/resume",
-      "thread/inject_items",
-    ]);
+    expect(request.mock.calls.map(([method]) => method)).toEqual(twoStartsThenResumeMethods());
     expect(request.mock.calls.find(([method]) => method === "thread/start")?.[1]).toMatchObject({
       config: { web_search: "cached" },
     });
@@ -4884,27 +4890,9 @@ describe("Codex app-server thread lifecycle bindings", () => {
     const workspaceDir = path.join(tempDir, "workspace");
     const params = createParams(sessionFile, workspaceDir);
     const appServer = createThreadLifecycleAppServerOptions();
-    let starts = 0;
-    const respond = vi.fn(async (method: string, requestParams?: unknown) => {
-      if (method === "config/read") {
-        return { config: {}, origins: {}, layers: [] };
-      }
-      if (method === "configRequirements/read") {
-        return { requirements: null };
-      }
-      if (method === "thread/start") {
-        starts += 1;
-        return threadStartResult(`thread-${starts}`);
-      }
-      if (method === "thread/resume") {
-        return threadStartResult((requestParams as { threadId: string }).threadId);
-      }
-      throw new Error(`unexpected method: ${method}`);
-    });
-    const fixture = await createLeasedCodexLifecycleHarness({
-      agentDir: path.join(tempDir, "agent"),
-      respond,
-    });
+    const fixture = await createSequentialLifecycleHarness((requestParams) =>
+      threadStartResult((requestParams as { threadId: string }).threadId),
+    );
     const { client, request } = fixture;
 
     await startOrResumeThread({
@@ -4941,21 +4929,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     expect(restrictedBinding.threadId).toBe("thread-2");
     expect(resumedRestrictedBinding.threadId).toBe("thread-2");
     expect((await readCodexAppServerBinding(sessionFile))?.threadId).toBe("thread-2");
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/read",
-      "thread/resume",
-      "thread/inject_items",
-    ]);
+    expect(request.mock.calls.map(([method]) => method)).toEqual(twoStartsThenResumeMethods());
   });
 
   it("persists config-denied search when runtime toolsAllow also excludes web_search", async () => {
@@ -4963,27 +4937,9 @@ describe("Codex app-server thread lifecycle bindings", () => {
     const workspaceDir = path.join(tempDir, "workspace");
     const params = createParams(sessionFile, workspaceDir);
     const appServer = createThreadLifecycleAppServerOptions();
-    let starts = 0;
-    const respond = vi.fn(async (method: string, requestParams?: unknown) => {
-      if (method === "config/read") {
-        return { config: {}, origins: {}, layers: [] };
-      }
-      if (method === "configRequirements/read") {
-        return { requirements: null };
-      }
-      if (method === "thread/start") {
-        starts += 1;
-        return threadStartResult(`thread-${starts}`);
-      }
-      if (method === "thread/resume") {
-        return threadStartResult((requestParams as { threadId: string }).threadId);
-      }
-      throw new Error(`unexpected method: ${method}`);
-    });
-    const fixture = await createLeasedCodexLifecycleHarness({
-      agentDir: path.join(tempDir, "agent"),
-      respond,
-    });
+    const fixture = await createSequentialLifecycleHarness((requestParams) =>
+      threadStartResult((requestParams as { threadId: string }).threadId),
+    );
     const { client, request } = fixture;
 
     await startOrResumeThread({
@@ -5247,29 +5203,9 @@ describe("Codex app-server thread lifecycle bindings", () => {
     const params = createParams(sessionFile, workspaceDir);
     params.disableTools = false;
     const appServer = createThreadLifecycleAppServerOptions();
-    let starts = 0;
-    const respond = vi.fn(async (method: string, requestParams?: unknown) => {
-      if (method === "config/read") {
-        return { config: {}, origins: {}, layers: [] };
-      }
-      if (method === "configRequirements/read") {
-        return { requirements: null };
-      }
-      if (method === "thread/start") {
-        starts += 1;
-        return threadStartResult(`thread-${starts}`);
-      }
-      if (method === "thread/resume") {
-        // Resume must echo the requested thread; anything else is rejected as
-        // an unsafe subscription.
-        return threadStartResult((requestParams as { threadId: string }).threadId);
-      }
-      throw new Error(`unexpected method: ${method}`);
-    });
-    const fixture = await createLeasedCodexLifecycleHarness({
-      agentDir: path.join(tempDir, "agent"),
-      respond,
-    });
+    const fixture = await createSequentialLifecycleHarness((requestParams) =>
+      threadStartResult((requestParams as { threadId: string }).threadId),
+    );
     const { client, request } = fixture;
 
     await startOrResumeThread({
@@ -5302,21 +5238,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     expect(restrictedBinding.threadId).toBe("thread-2");
     expect(savedAfterRestriction?.threadId).toBe("thread-1");
     expect(resumedBinding.threadId).toBe("thread-1");
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/read",
-      "thread/resume",
-      "thread/inject_items",
-    ]);
+    expect(request.mock.calls.map(([method]) => method)).toEqual(twoStartsThenResumeMethods());
     expect(
       request.mock.calls.filter(
         ([method]) => method === "thread/start" || method === "thread/resume",
@@ -5676,26 +5598,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     const workspaceDir = path.join(tempDir, "workspace");
     const params = createParams(sessionFile, workspaceDir);
     const appServer = createThreadLifecycleAppServerOptions();
-    let nextThread = 1;
-    const respond = vi.fn(async (method: string) => {
-      if (method === "config/read") {
-        return { config: {}, origins: {}, layers: [] };
-      }
-      if (method === "configRequirements/read") {
-        return { requirements: null };
-      }
-      if (method === "thread/start") {
-        return threadStartResult(`thread-${nextThread++}`);
-      }
-      if (method === "thread/resume") {
-        return threadStartResult("thread-1");
-      }
-      throw new Error(`unexpected method: ${method}`);
-    });
-    const fixture = await createLeasedCodexLifecycleHarness({
-      agentDir: path.join(tempDir, "agent"),
-      respond,
-    });
+    const fixture = await createSequentialLifecycleHarness(() => threadStartResult("thread-1"));
     const { client, request } = fixture;
 
     await startOrResumeThread({
@@ -5727,21 +5630,7 @@ describe("Codex app-server thread lifecycle bindings", () => {
     expect(binding?.dynamicToolsFingerprint).toBe(fingerprint);
     expect(binding?.dynamicToolsContainDeferred).toBe(true);
     expect(binding?.threadId).toBe("thread-1");
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/start",
-      "thread/unsubscribe",
-      "config/read",
-      "configRequirements/read",
-      "thread/read",
-      "thread/resume",
-      "thread/inject_items",
-    ]);
+    expect(request.mock.calls.map(([method]) => method)).toEqual(twoStartsThenResumeMethods());
   });
 
   it("stores large dynamic tool fingerprints as bounded hashes", async () => {

@@ -254,17 +254,23 @@ export {
   loadTranscriptEventsSync,
   loadTranscriptHeaderSync,
   loadTranscriptTailEventsSync,
+  loadTranscriptSuffixEventsBoundedSync,
   persistCompactionBoundaryWithSessionEntrySync,
   preflightSessionTranscriptForManualCompact,
   publishTranscriptUpdate,
   readLatestTranscriptAssistantText,
   readTranscriptEventAtSeqSync,
+  readPreviousIndexedTranscriptEventSync,
+  readTranscriptIdentityByEventId,
   readTranscriptRawDelta,
+  readTranscriptMutationAtSync,
   readTranscriptStatsBatchReadOnlySync,
   readTranscriptStatsSync,
+  validatePreparedAssistantAppendSync,
   replaceTranscriptEvents,
   replaceTranscriptEventsSync,
   replaceSessionWithBranchedTranscript,
+  replaceTranscriptSuffixEventsSync,
   rewriteTranscriptEventRowsExact,
   rewriteTranscriptMessageAtAnchor,
   resolveTranscriptSessionKeyBySessionId,
@@ -281,6 +287,7 @@ export {
   type ClosedTranscriptTurnReadResult,
 } from "./session-accessor.transcript-range.js";
 export { readActiveTranscriptEntryAnchor } from "./session-accessor.sqlite-transcript-anchor.js";
+export { validateSessionTranscriptContextAdmission } from "./session-accessor.sqlite-model-context.js";
 export {
   isSessionTranscriptProjectionUnavailableError,
   readRecentSessionTranscriptActiveEvents,
@@ -322,3 +329,4 @@ export {
   appendSessionTranscriptReport,
   readLatestSessionTranscriptReport,
 } from "./session-accessor.sqlite-transcript-reports.js";
+export type { SessionEntryReadSource } from "./session-accessor.sqlite-exact-read.js";

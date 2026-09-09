@@ -83,6 +83,13 @@ for index in "${!MANAGERS[@]}"; do
   PARSED_VERSIONS+=("$parsed_version")
 done
 
+# The legacy contract intentionally skips native verification; evidence must not
+# present that omission as an executed native proof.
+MUSL_FS_SAFE_NATIVE_OUTCOME="passed"
+if [[ "${OPENCLAW_FS_SAFE_NATIVE_CONTRACT:-required}" == "not-applicable" ]]; then
+  MUSL_FS_SAFE_NATIVE_OUTCOME="not-applicable"
+fi
+
 node --import tsx "$ROOT_DIR/scripts/e2e/lib/docker-artifact-proof/write-identities.ts" \
   --scenario docker-package-install \
   --output "$IDENTITY_PATH" \
@@ -99,7 +106,7 @@ node --import tsx "$ROOT_DIR/scripts/e2e/lib/docker-artifact-proof/write-identit
   --detail "npm:openclawPath=/usr/local/bin/openclaw" \
   --detail "npm:helpCommand=passed" \
   --detail "npm:nonRootExecution=passed" \
-  --detail "musl:fsSafeNative=passed" \
+  --detail "musl:fsSafeNative=$MUSL_FS_SAFE_NATIVE_OUTCOME" \
   --detail "pnpm:installedPackageRoot=$PNPM_PACKAGE_ROOT" \
   --detail "pnpm:installedPackageVersion=$PNPM_PACKAGE_VERSION" \
   --detail "pnpm:openclawVersion=$PNPM_INSTALLED_VERSION" \
