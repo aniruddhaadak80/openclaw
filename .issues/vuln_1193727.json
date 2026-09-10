@@ -1,0 +1,4 @@
+{
+  "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+  "body": "Patches vulnerability GHSA-2883-xcg3-v3hh by updating js-yaml to version 4.3.2"
+}

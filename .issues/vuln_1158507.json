@@ -1,0 +1,4 @@
+{
+  "title": "qs: Denial of Service via Attacker Controlled isBuffer",
+  "body": "Patches vulnerability GHSA-4mjr-xmp4-gh2g by updating qs to version 6.16.0"
+}

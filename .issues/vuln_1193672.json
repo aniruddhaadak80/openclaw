@@ -1,0 +1,4 @@
+{
+  "title": "joi: Prototype pollution via a `__proto__` language key in custom messages",
+  "body": "Patches vulnerability GHSA-6w3j-5fw6-r9vr by updating joi to version 18.2.5"
+}

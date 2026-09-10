@@ -1,0 +1,4 @@
+{
+  "title": "qs array-limit bypass via bracket-key comma parsing",
+  "body": "Patches vulnerability GHSA-x5fp-wj9c-mxmx by updating qs to version 6.16.0"
+}
