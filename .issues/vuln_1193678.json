@@ -1,0 +1,4 @@
+{
+  "title": "joi: object().rename() with a template target can set the validated object's prototype",
+  "body": "Module: joi\nSeverity: low\nVulnerable Versions: >=18.0.0 <18.2.4\nPatched Versions: >=18.2.4\nURL: https://github.com/advisories/GHSA-gg4h-3hg2-grpc"
+}

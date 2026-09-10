@@ -1,0 +1,4 @@
+{
+  "title": "js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources",
+  "body": "Module: js-yaml\nSeverity: high\nVulnerable Versions: >=4.0.0 <4.3.2\nPatched Versions: >=4.3.2\nURL: https://github.com/advisories/GHSA-2883-xcg3-v3hh"
+}

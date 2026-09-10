@@ -1,0 +1,4 @@
+{
+  "title": "qs array-limit bypass via bracket-key comma parsing",
+  "body": "Module: qs\nSeverity: moderate\nVulnerable Versions: >=6.14.2 <=6.15.3\nPatched Versions: >=6.16.0\nURL: https://github.com/advisories/GHSA-x5fp-wj9c-mxmx"
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Hono: Incomplete fix for CVE-2026-39408: `toSSG()` still writes files outside the output directory",
+  "body": "Module: hono\nSeverity: moderate\nVulnerable Versions: <4.13.5\nPatched Versions: >=4.13.5\nURL: https://github.com/advisories/GHSA-gqvv-2mrq-wpjv"
+}
