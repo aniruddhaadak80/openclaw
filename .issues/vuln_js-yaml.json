@@ -1,0 +1,4 @@
+{
+  "title": "Patch vulnerability in js-yaml",
+  "body": "Updated js-yaml to patched version 4.3.2"
+}
