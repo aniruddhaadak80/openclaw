@@ -1,0 +1,1 @@
+{"title":"Fix js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources","body":"Patches vulnerability 1193727 in js-yaml."}

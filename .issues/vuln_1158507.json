@@ -1,0 +1,1 @@
+{"title":"Fix qs: Denial of Service via Attacker Controlled isBuffer","body":"Patches vulnerability 1158507 in qs."}

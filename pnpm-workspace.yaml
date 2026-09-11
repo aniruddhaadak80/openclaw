@@ -46,6 +46,10 @@ minimumReleaseAgeExclude:
   # Bot API 10.3 types replace OpenClaw's temporary rich-message bridge.
   - "@grammyjs/types@5.0.0"
   - "grammy@1.46.0"
+  - "qs@6.16.0"
+  - "hono@4.13.5"
+  - "joi@18.2.5"
+  - "js-yaml@4.3.2"
 
 # Isolated installs let pnpm reuse whole-package APFS clones instead of relinking every file.
 nodeLinker: isolated
@@ -87,7 +91,10 @@ overrides:
   "mailparser@3.9.15>nodemailer": 9.1.1
   minimatch: 10.2.6
   path-to-regexp: 8.4.2
-  qs: 6.15.3
+  qs: 6.16.0
+  hono: 4.13.5
+  joi: 18.2.5
+  js-yaml: 4.3.2
   node-domexception: "npm:@nolyfill/domexception@1.0.28"
   typebox: 1.3.18
   tar: 7.5.22

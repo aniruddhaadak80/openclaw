@@ -1,0 +1,1 @@
+{"title":"Fix Hono: Incomplete fix for CVE-2026-39408: `toSSG()` still writes files outside the output directory","body":"Patches vulnerability 1193729 in hono."}
