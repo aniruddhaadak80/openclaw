@@ -1,0 +1,1 @@
+{"title": "Hono: Unbounded dot-notation nesting in `parseBody()` can cause memory exhaustion", "body": "Update hono to >=4.13.5"}
