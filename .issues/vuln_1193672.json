@@ -1,0 +1,1 @@
+{"title": "[Vulnerability] joi: Prototype pollution via a `__proto__` language key in custom messages", "body": "Vulnerability ID: 1193672\nModule: joi\nPatched Versions: >=18.2.5"}

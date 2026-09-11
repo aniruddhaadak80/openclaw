@@ -1,0 +1,1 @@
+{"title": "[Vulnerability] qs array-limit bypass via bracket-key comma parsing", "body": "Vulnerability ID: 1158506\nModule: qs\nPatched Versions: >=6.16.0"}

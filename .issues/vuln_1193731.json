@@ -1,0 +1,1 @@
+{"title": "[Vulnerability] Hono: Query parser reads parameters after the URL fragment, causing cache-key and proxy interpretation differentials", "body": "Vulnerability ID: 1193731\nModule: hono\nPatched Versions: >=4.13.5"}

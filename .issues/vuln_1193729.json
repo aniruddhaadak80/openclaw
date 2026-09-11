@@ -1,0 +1,1 @@
+{"title": "[Vulnerability] Hono: Incomplete fix for CVE-2026-39408: `toSSG()` still writes files outside the output directory", "body": "Vulnerability ID: 1193729\nModule: hono\nPatched Versions: >=4.13.5"}

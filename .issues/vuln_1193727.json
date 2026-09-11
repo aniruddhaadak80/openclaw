@@ -1,0 +1,1 @@
+{"title": "[Vulnerability] js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources", "body": "Vulnerability ID: 1193727\nModule: js-yaml\nPatched Versions: >=4.3.2"}
