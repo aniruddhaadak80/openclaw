@@ -1,0 +1,1 @@
+{"title": "Hono: Query parser reads parameters after the URL fragment, causing cache-key and proxy interpretation differentials", "body": "Fixes vulnerability 1193731 in hono by updating to version 4.13.5."}

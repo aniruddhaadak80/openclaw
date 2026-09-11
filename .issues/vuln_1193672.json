@@ -1,0 +1,1 @@
+{"title": "joi: Prototype pollution via a `__proto__` language key in custom messages", "body": "Fixes vulnerability 1193672 in joi by updating to version 18.2.5."}

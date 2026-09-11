@@ -1,0 +1,1 @@
+{"title": "qs array-limit bypass via bracket-key comma parsing", "body": "Fixes vulnerability 1158506 in qs by updating to version 6.16.0."}

@@ -1,0 +1,1 @@
+{"title": "qs: Denial of Service via Attacker Controlled isBuffer", "body": "Fixes vulnerability 1158507 in qs by updating to version 6.16.0."}
