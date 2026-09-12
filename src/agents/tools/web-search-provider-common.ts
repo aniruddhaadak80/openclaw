@@ -78,16 +78,6 @@ export function readConfiguredSecretString(value: unknown, path: string): string
   return normalizeSecretInput(normalizeResolvedSecretInputString({ value, path })) || undefined;
 }
 
-export function readProviderEnvValue(envVars: string[]): string | undefined {
-  for (const envVar of envVars) {
-    const value = normalizeSecretInput(process.env[envVar]);
-    if (value) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
 export async function withTrustedWebSearchEndpoint<T>(
   params: {
     url: string;
