@@ -107,75 +107,72 @@ async function setupArchivedPageWithSelection(
 }
 
 describe("sessions page agent-scope retirement", () => {
-  it.each([false, true])(
-    "settles real delete-all confirmation (retire: %s)",
-    async (retire) => {
-      const actual = await vi.importActual<typeof import("../../components/confirm-dialog.ts")>(
-        "../../components/confirm-dialog.ts",
-      );
-      vi.mocked(showConfirmDialog).mockImplementation(actual.showConfirmDialog);
-      const fixture = createModalDialogTestFixture();
-      const list = vi.fn<SessionCapability["list"]>(async (options) =>
-        sessionsResult(
-          [
-            {
-              key: `agent:${options?.agentId ?? "main"}:archived`,
-              kind: "direct",
-              archived: true,
-            },
-          ],
-          1,
-        ),
-      );
-      const deleteMany = vi.fn<SessionCapability["deleteMany"]>().mockResolvedValue({
-        deleted: [],
-        errors: [],
-        preservedWorktrees: [],
-      });
-      try {
-        const { page, changeScope } = await setupArchivedPageWithSelection(
-          "writer",
-          createSessions({ list, deleteMany }),
-        );
-        let operation = fixture.track(page.deleteAllArchived());
-        let actions = await waitForConfirmDialogActions();
-        const { dialog } = await getRenderedModalDialog(document.body);
-        expect(dialog.open).toBe(true);
-
-        changeScope(retire ? "main" : "writer");
-        if (retire) {
-          await vi.waitFor(() =>
-            expect(document.body.querySelector("openclaw-modal-dialog")).toBeNull(),
-          );
-          await operation;
-          expect(deleteMany).not.toHaveBeenCalled();
-          await page.updateComplete;
-          await vi.waitFor(() => expect(page.loading).toBe(false));
-          operation = fixture.track(page.deleteAllArchived());
-          actions = await waitForConfirmDialogActions();
-          const replacement = await getRenderedModalDialog(document.body);
-          expect(replacement.dialog.open).toBe(true);
-        } else {
-          expect(actions.isConnected).toBe(true);
-          expect(deleteMany).not.toHaveBeenCalled();
-        }
-
-        answerConfirmDialog(actions, "confirm");
-        await operation;
-        expect(deleteMany).toHaveBeenCalledExactlyOnceWith([
+  it.each([false, true])("settles real delete-all confirmation (retire: %s)", async (retire) => {
+    const actual = await vi.importActual<typeof import("../../components/confirm-dialog.ts")>(
+      "../../components/confirm-dialog.ts",
+    );
+    vi.mocked(showConfirmDialog).mockImplementation(actual.showConfirmDialog);
+    const fixture = createModalDialogTestFixture();
+    const list = vi.fn<SessionCapability["list"]>(async (options) =>
+      sessionsResult(
+        [
           {
-            key: `agent:${retire ? "main" : "writer"}:archived`,
-            agentId: undefined,
-            archivedOnly: true,
-            deleteTranscript: true,
+            key: `agent:${options?.agentId ?? "main"}:archived`,
+            kind: "direct",
+            archived: true,
           },
-        ]);
-        expect(document.body.querySelector("openclaw-modal-dialog")).toBeNull();
-      } finally {
-        await fixture.cleanup();
+        ],
+        1,
+      ),
+    );
+    const deleteMany = vi.fn<SessionCapability["deleteMany"]>().mockResolvedValue({
+      deleted: [],
+      errors: [],
+      preservedWorktrees: [],
+    });
+    try {
+      const { page, changeScope } = await setupArchivedPageWithSelection(
+        "writer",
+        createSessions({ list, deleteMany }),
+      );
+      let operation = fixture.track(page.deleteAllArchived());
+      let actions = await waitForConfirmDialogActions();
+      const { dialog } = await getRenderedModalDialog(document.body);
+      expect(dialog.open).toBe(true);
+
+      changeScope(retire ? "main" : "writer");
+      if (retire) {
+        await vi.waitFor(() =>
+          expect(document.body.querySelector("openclaw-modal-dialog")).toBeNull(),
+        );
+        await operation;
+        expect(deleteMany).not.toHaveBeenCalled();
+        await page.updateComplete;
+        await vi.waitFor(() => expect(page.loading).toBe(false));
+        operation = fixture.track(page.deleteAllArchived());
+        actions = await waitForConfirmDialogActions();
+        const replacement = await getRenderedModalDialog(document.body);
+        expect(replacement.dialog.open).toBe(true);
+      } else {
+        expect(actions.isConnected).toBe(true);
+        expect(deleteMany).not.toHaveBeenCalled();
       }
-    },
-  );
+
+      answerConfirmDialog(actions, "confirm");
+      await operation;
+      expect(deleteMany).toHaveBeenCalledExactlyOnceWith([
+        {
+          key: `agent:${retire ? "main" : "writer"}:archived`,
+          agentId: undefined,
+          archivedOnly: true,
+          deleteTranscript: true,
+        },
+      ]);
+      expect(document.body.querySelector("openclaw-modal-dialog")).toBeNull();
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 
   it.each([false, true])(
     "retires pending enumeration after a scope change (return: %s)",
