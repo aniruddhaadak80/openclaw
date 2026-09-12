@@ -1,0 +1,4 @@
+{
+  "title": "joi: Prototype pollution via a `__proto__` language key in custom messages",
+  "body": "1193672"
+}

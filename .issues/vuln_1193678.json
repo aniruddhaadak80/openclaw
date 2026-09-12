@@ -1,0 +1,4 @@
+{
+  "title": "joi: object().rename() with a template target can set the validated object's prototype",
+  "body": "1193678"
+}

@@ -1,0 +1,4 @@
+{
+  "title": "Hono: Unbounded dot-notation nesting in `parseBody()` can cause memory exhaustion",
+  "body": "1193730"
+}
