@@ -10,6 +10,10 @@ minimumReleaseAgeStrict: true
 
 # Trusted Codex runtimes are outside the dependency cooldown.
 minimumReleaseAgeExclude:
+  - "qs@6.16.0"
+  - "joi@18.2.5"
+  - "js-yaml@4.3.2"
+  - "hono@4.13.5"
   # Reviewed Proxyline Bun runtime fix; remove after 2026-09-13 20:51 UTC.
   - "@openclaw/proxyline@0.3.11"
   # GHSA-vp8m-p9jh-q5pm / GHSA-w293-vg96-wgc3 security fixes; remove after 2026-09-12.
@@ -66,6 +70,9 @@ overrides:
   "@aws-sdk/credential-provider-node": 3.972.81
   "@aws-sdk/xml-builder": 3.972.40
   "@hono/node-server": 2.1.1
+  hono: 4.13.5
+  joi: 18.2.5
+  js-yaml: 4.3.2
   axios: 1.19.0
   fast-uri: 4.1.4
   follow-redirects: 1.16.0
@@ -87,7 +94,7 @@ overrides:
   "mailparser@3.9.15>nodemailer": 9.1.1
   minimatch: 10.2.6
   path-to-regexp: 8.4.2
-  qs: 6.15.3
+  qs: 6.16.0
   node-domexception: "npm:@nolyfill/domexception@1.0.28"
   typebox: 1.3.18
   tar: 7.5.22
