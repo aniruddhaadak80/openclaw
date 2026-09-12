@@ -10,6 +10,7 @@ import { normalizeAgentId } from "@openclaw/normalization-core/agent-id";
 import { buildControlUiSessionPath } from "@openclaw/session-url-contract";
 import type { ConsoleMessage, Frame, Locator, Page, Request } from "playwright";
 import type { InlineConfig, Plugin, PreviewServer, ViteDevServer } from "vite";
+import { GATEWAY_SERVER_CAPS } from "../../../packages/gateway-protocol/src/server-capabilities.js";
 import { PROTOCOL_VERSION } from "../../../packages/gateway-protocol/src/version.js";
 import { CONTROL_UI_BOOTSTRAP_CONFIG_PATH } from "../../../src/gateway/control-ui-contract.js";
 import { controlUiPluginAssetRoot } from "../../../src/gateway/control-ui-plugin-assets-contract.js";
@@ -481,8 +482,10 @@ export type ControlUiMockGatewayScenario = {
     icon?: string;
     id: string;
     label: string;
+    path?: string;
     placement?: string;
     pluginId: string;
+    slug?: string;
   }>;
   controlUiWidgetKinds?: Array<{
     kind: string;
@@ -492,6 +495,7 @@ export type ControlUiMockGatewayScenario = {
   allowedSessionVisibilities?: Array<"shared" | "read-only" | "suggest" | "draft">;
   hasMultipleSessionSharingIdentities?: boolean;
   featureCapabilities?: string[];
+  connectCapabilities?: string[];
   defaultAgentId?: string;
   deferredMethods?: string[];
   /** Hold every request until resolveDeferred/rejectDeferred releases the method. */
@@ -782,6 +786,47 @@ export type MockGatewayControls = {
     options?: { after?: number; match?: Record<string, unknown> },
   ) => Promise<MockGatewayRequest>;
 };
+
+export async function reconnectMockGateway(
+  page: Page,
+  gateway: MockGatewayControls,
+  bootId?: string,
+): Promise<void> {
+  const socketCount = await gateway.getSocketCount();
+  if (bootId) {
+    await gateway.setGatewayBootId(bootId);
+  }
+  await gateway.closeLatest(1001, "mock Gateway restart");
+  await gateway.setOnline(false);
+  await page.waitForFunction(
+    () => {
+      const app = document.querySelector("openclaw-app") as HTMLElement & {
+        runtime?: { context: { gateway: { snapshot: { phase: string } } } };
+      };
+      return app.runtime?.context.gateway.snapshot.phase === "reconnecting";
+    },
+    undefined,
+    { timeout: controlUiE2eWaitTimeoutMs },
+  );
+  await page.waitForFunction(
+    (previousSocketCount) =>
+      ((window as MockGatewayWindow).openclawControlUiE2eGateway?.socketCount() ?? 0) >
+      previousSocketCount,
+    socketCount,
+    { timeout: controlUiE2eWaitTimeoutMs },
+  );
+  await gateway.setOnline(true);
+  await page.waitForFunction(
+    () => {
+      const app = document.querySelector("openclaw-app") as HTMLElement & {
+        runtime?: { context: { gateway: { snapshot: { phase: string } } } };
+      };
+      return app.runtime?.context.gateway.snapshot.phase === "connected";
+    },
+    undefined,
+    { timeout: controlUiE2eWaitTimeoutMs },
+  );
+}
 
 const chromiumExecutableOverrideEnvKey = "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH";
 export const systemChromiumExecutableCandidates = [
@@ -1146,6 +1191,9 @@ function normalizeScenario(
     ],
     hasMultipleSessionSharingIdentities: scenario.hasMultipleSessionSharingIdentities ?? false,
     featureCapabilities: scenario.featureCapabilities ?? [],
+    connectCapabilities: scenario.connectCapabilities ?? [
+      GATEWAY_SERVER_CAPS.MODEL_CATALOG_SNAPSHOT,
+    ],
     defaultAgentId,
     deferredMethods: scenario.deferredMethods ?? [],
     heldMethods: scenario.heldMethods ?? [],
@@ -2526,6 +2574,8 @@ function installControlUiMockGateway(
           sessions: { count: 1, path: "", recent: [] },
           ts: Date.now(),
         };
+      case "models.authStatus":
+        return { ts: Date.now(), providers: [] };
       case "models.list":
         return { models: scenario.models };
       case "sessions.create": {
@@ -2809,7 +2859,11 @@ function installControlUiMockGateway(
       this.dispatchEvent(new Event("open"));
       this.deliver({
         event: "connect.challenge",
-        payload: { nonce: "control-ui-e2e-nonce", ts: Date.now() },
+        payload: {
+          nonce: "control-ui-e2e-nonce",
+          ts: Date.now(),
+          capabilities: scenario.connectCapabilities,
+        },
         type: "event",
       });
     }
@@ -2881,7 +2935,10 @@ function installControlUiMockGateway(
           method === "chat.abort" &&
           isRecord(frame.params) &&
           typeof frame.params.runId === "string" &&
-          typeof frame.params.sessionKey === "string"
+          typeof frame.params.sessionKey === "string" &&
+          // No accepted abort emits no synthetic terminal event. The run may
+          // have finished or may still be finalizing.
+          !(isRecord(payload) && payload.aborted === false)
         ) {
           this.deliver({
             event: "chat",
