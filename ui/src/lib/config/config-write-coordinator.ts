@@ -103,6 +103,7 @@ export function createConfigWriteCoordinator({
   // App-updater interlock: config writes or gateway restarts mid-update can
   // corrupt the install, so all writes pause until the updater settles.
   let writesSuspended = false;
+  let refreshWriteAdmission: (() => Promise<void>) | undefined;
   let writesResumed: (() => void) | null = null;
   let writesResumedPromise: Promise<void> = Promise.resolve();
   const canDispatchConfigMutation = (method: ConfigMethod): boolean => {
@@ -193,7 +194,7 @@ export function createConfigWriteCoordinator({
     const submit = task((submission) => {
       flight.submission = submission;
       // Keep the ack for teardown, but only a live flight may retire older loads.
-      if (submission.ackHash && !isDisposed() && inFlight === flight) {
+      if (submission.ack && !isDisposed() && inFlight === flight) {
         invalidateConfigLoad();
       }
     });
@@ -344,7 +345,7 @@ export function createConfigWriteCoordinator({
     unavailable: T,
     options: { flushScheduledDraft?: boolean; canDispatch?: () => boolean } = {},
   ): Promise<T> => {
-    if (writesSuspended) {
+    if (writesSuspended && !refreshWriteAdmission) {
       return Promise.resolve(unavailable);
     }
     const client = state.client;
@@ -358,6 +359,17 @@ export function createConfigWriteCoordinator({
     // to the CURRENT connection epoch; only genuine queuing pays the hop.
     const start = () =>
       run(async () => {
+        if (writesSuspended && refreshWriteAdmission && !isDisposed()) {
+          // The Gateway classifies driver liveness and retained recovery before this interlock can open.
+          await refreshWriteAdmission();
+          if (!writesSuspended) {
+            if (options.flushScheduledDraft) {
+              flushScheduledAutoSave();
+            } else {
+              cancelScheduledAutoSave();
+            }
+          }
+        }
         // Drain before the explicit op — otherwise an apply could race a
         // pending config.set on the same base hash into a CAS failure.
         if (inFlight) {
@@ -569,7 +581,8 @@ export function createConfigWriteCoordinator({
       });
       clearAutoSaveDraftConnection();
     },
-    setWritesSuspended: (suspended) => {
+    setWritesSuspended: (suspended, refreshAdmission) => {
+      refreshWriteAdmission = refreshAdmission;
       if (writesSuspended === suspended) {
         return;
       }
@@ -608,7 +621,7 @@ export function createConfigWriteCoordinator({
                   state,
                   "save",
                   (submission) => {
-                    if (submission.ackHash === null) {
+                    if (submission.ack === null) {
                       patches.clear();
                     }
                     onSubmitted(submission);
@@ -696,7 +709,10 @@ export function createConfigWriteCoordinator({
       const mutationConnectionEpoch = currentConfigConnectionEpoch(state);
       while (true) {
         if (options.waitForWritesResumed && writesSuspended && !isDisposed()) {
-          await writesResumedPromise;
+          await refreshWriteAdmission?.();
+          if (writesSuspended && !isDisposed()) {
+            await writesResumedPromise;
+          }
         }
         const unavailable: RuntimeConfigExternalMutationResult<T> = {
           ok: false,
@@ -772,17 +788,17 @@ export function createConfigWriteCoordinator({
           // The settled flight could not update dirty/base state past the
           // epoch guard; a draft whose bytes differ from that submission is a
           // newer edit and gets exactly one chained final save — never a
-          // parallel one. Applies and external mutations never register submission
-          // info: only this save's own ack is a safe CAS base for a final flush.
+          // parallel one. The save's canonical acknowledgement supplies both
+          // the document and revision for replaying that newer edit.
           const submitted = pendingFlight.submission;
-          const ackHash = submitted?.ackHash ?? null;
+          const ack = submitted?.ack ?? null;
           const submittedRaw = submitted?.raw ?? null;
           // Bytes-vs-submission is the only trustworthy signal here: the
           // epoch guard blocked the ack's rebase, so a revert back to the
           // pre-save value reads configFormDirty=false while the persisted
           // bytes are still the unreverted submission.
-          if (ackHash && submittedRaw !== null && serializeFormForSubmit(state) !== submittedRaw) {
-            teardownFlushConfigDraft(state, client, ackHash, () =>
+          if (ack && submittedRaw !== null && serializeFormForSubmit(state) !== submittedRaw) {
+            teardownFlushConfigDraft(state, client, submittedRaw, ack, () =>
               canCallConfigMethod("config.set"),
             );
           }
