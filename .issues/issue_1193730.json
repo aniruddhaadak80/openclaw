@@ -1,0 +1,1 @@
+{"title": "Vulnerability 1193730 in hono", "body": "Hono: Unbounded dot-notation nesting in `parseBody()` can cause memory exhaustion"}

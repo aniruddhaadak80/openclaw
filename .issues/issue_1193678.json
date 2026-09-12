@@ -1,0 +1,1 @@
+{"title": "Vulnerability 1193678 in joi", "body": "joi: object().rename() with a template target can set the validated object's prototype"}
