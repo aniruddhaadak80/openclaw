@@ -11,13 +11,13 @@ import { pruneMapToMaxSize } from "../../infra/map-size.js";
 import {
   getActiveTranscriptKysely,
   parseActiveTranscriptMessageRow,
-  readTranscriptProjectionGeneration,
   type CurrentTranscriptProjection,
   type SessionTranscriptMessageEvent,
 } from "./session-accessor.sqlite-active-projection.js";
 import { projectModelContextNavigationSql } from "./session-model-context-projection.js";
 
 type VisibleMessagePositions = {
+  boundaryActivePosition?: number;
   kept: number[];
   postStart: number;
   total: number;
@@ -257,7 +257,7 @@ export function resolveTranscriptBoundaryWindow(
   }
   const key = `${projection.database.path}\0${projection.resolved.sessionId}\0${scope}`;
   const cached = resetMessageWindowCache.get(key);
-  const generation = readTranscriptProjectionGeneration(projection);
+  const generation = projection.generation;
   if (cached) {
     if (cached.generation === generation && cached.indexedSeq === projection.state.indexedSeq) {
       return cached.window;
@@ -336,6 +336,7 @@ export function resolveVisibleMessagePositions(
     return { kept: [], postStart: 0, total: projection.state.activeMessageCount };
   }
   return {
+    boundaryActivePosition: window.boundaryActivePosition,
     kept: window.keptMessagePositions,
     postStart: window.postBoundaryMessagePosition,
     total:
