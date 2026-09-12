@@ -86,7 +86,7 @@ describe("config form composition integrity", () => {
     expect(unsupportedUnion.unsupportedPaths).toEqual(["mixed"]);
   });
 
-  it("renders finite boolean unions while keeping open typed unions in Raw mode", () => {
+  it("renders finite boolean unions and string-or-literal unions while keeping constrained unions in Raw mode", () => {
     const analysis = analyzeConfigSchema({
       type: "object",
       properties: {
@@ -98,6 +98,9 @@ describe("config form composition integrity", () => {
         },
         nullableBoolean: {
           anyOf: [{ type: ["boolean", "null"] }, { const: "auto" }],
+        },
+        nullableString: {
+          anyOf: [{ type: ["string", "null"] }, { type: "boolean", const: false }],
         },
         ambiguousBooleanLabel: {
           anyOf: [{ type: "boolean" }, { const: "true" }],
@@ -124,9 +127,9 @@ describe("config form composition integrity", () => {
     });
 
     expect(analysis.unsupportedPaths).toEqual([
-      "retention",
       "guarded",
       "nullableBoolean",
+      "nullableString",
       "ambiguousBooleanLabel",
       "overlappingOneOf",
     ]);
@@ -643,15 +646,23 @@ describe("config form composition integrity", () => {
     expect(onPatch).not.toHaveBeenCalled();
   });
 
-  it("marks ambiguous non-null type arrays as form-unsafe", () => {
+  it("normalizes primitive type arrays without accepting structured or composed type arrays", () => {
     const analysis = analyzeConfigSchema({
       type: "object",
       properties: {
         numberFirst: { type: ["number", "string"] },
         stringFirst: { type: ["string", "number"] },
+        nullable: { type: ["string", "number", "null"], minimum: 2, maxLength: 4 },
+        structured: { type: ["object", "array"] },
+        composed: { type: ["string", "number"], allOf: [{ minimum: 2 }] },
       },
     });
-    expect(analysis.unsupportedPaths).toEqual(["numberFirst", "stringFirst"]);
+    expect(analysis.unsupportedPaths).toEqual(["structured", "composed"]);
+    expect(analysis.schema?.properties?.nullable).toMatchObject({
+      nullable: true,
+      minimum: 2,
+      maxLength: 4,
+    });
   });
 
   it("marks allOf branches with unenforced constraint keywords as form-unsafe", () => {
