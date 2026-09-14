@@ -27,6 +27,9 @@ minimumReleaseAgeExclude:
   - "jszip@3.10.2"
   # GHSA-prgh-xp8r-p3m5 / GHSA-v53p-9fqp-m79j security fixes; remove after 2026-09-18.
   - "nodemailer@10.0.8"
+  - "joi@18.2.9"
+  - "js-yaml@5.4.2"
+  - "hono@4.13.7"
 
 # Isolated installs let pnpm reuse whole-package APFS clones instead of relinking every file.
 nodeLinker: isolated
@@ -48,6 +51,9 @@ overrides:
   "@aws-sdk/credential-provider-node": 3.972.82
   "@aws-sdk/xml-builder": 3.972.40
   "@hono/node-server": 2.1.1
+  hono: 4.13.7
+  joi: 18.2.9
+  js-yaml: 5.4.2
   axios: 1.20.0
   fast-uri: 4.1.4
   follow-redirects: 1.16.0
