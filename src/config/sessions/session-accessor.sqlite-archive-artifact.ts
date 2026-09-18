@@ -21,8 +21,49 @@ export const MAX_MATERIALIZED_ARCHIVE_BATCH_BYTES = 256 * 1024 * 1024;
 // compression suffixes, and staging UUIDs. Raising this can break publication.
 const MAX_REGISTERED_ARCHIVE_SESSION_ID_BYTES = 96;
 
+// Characters illegal in Windows filenames, plus ASCII controls. A raw session
+// id containing any of these (notably the `:` in `agent:main:...` keys) makes
+// archive materialization fail with ENOENT on Windows.
+const WINDOWS_UNSAFE_ARCHIVE_ID_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
+
+// Windows reserved device names, matched without extension and case-insensitively.
+const WINDOWS_RESERVED_ARCHIVE_ID_NAMES = new Set([
+  "CON",
+  "PRN",
+  "AUX",
+  "NUL",
+  "COM1",
+  "COM2",
+  "COM3",
+  "COM4",
+  "COM5",
+  "COM6",
+  "COM7",
+  "COM8",
+  "COM9",
+  "LPT1",
+  "LPT2",
+  "LPT3",
+  "LPT4",
+  "LPT5",
+  "LPT6",
+  "LPT7",
+  "LPT8",
+  "LPT9",
+]);
+
+function isWindowsUnsafeArchiveSessionId(sessionId: string): boolean {
+  if (WINDOWS_UNSAFE_ARCHIVE_ID_CHARS.test(sessionId)) {
+    return true;
+  }
+  return WINDOWS_RESERVED_ARCHIVE_ID_NAMES.has(sessionId.split(".")[0]?.toUpperCase() ?? "");
+}
+
 function resolveRegisteredArchiveSessionIdComponent(sessionId: string): string {
-  if (Buffer.byteLength(sessionId, "utf8") <= MAX_REGISTERED_ARCHIVE_SESSION_ID_BYTES) {
+  if (
+    Buffer.byteLength(sessionId, "utf8") <= MAX_REGISTERED_ARCHIVE_SESSION_ID_BYTES &&
+    !isWindowsUnsafeArchiveSessionId(sessionId)
+  ) {
     return sessionId;
   }
   return `session-${createHash("sha256").update(sessionId).digest("hex")}`;
