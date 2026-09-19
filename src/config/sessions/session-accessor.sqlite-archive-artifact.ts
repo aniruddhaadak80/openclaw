@@ -27,7 +27,7 @@ const MAX_REGISTERED_ARCHIVE_SESSION_ID_BYTES = 96;
 // deliberately excluded: `/` and `\` stay raw so the outside-directory guard
 // in resolveSqliteTranscriptArchivePath keeps rejecting traversal, and ASCII
 // controls are checked without a regex (no-control-regex).
-const WINDOWS_UNSAFE_ARCHIVE_ID_CHARS = /[<>:\"|?*\\]/;
+const WINDOWS_UNSAFE_ARCHIVE_ID_CHARS = /[<>:"|?*\\]/;
 
 function hasControlChar(sessionId: string): boolean {
   for (const ch of sessionId) {
