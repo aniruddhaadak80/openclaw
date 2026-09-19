@@ -548,7 +548,7 @@ describe("SQLite transcript archive worker", () => {
   });
 
   it("preserves all lifecycle state when the archive worker rejects publication", async () => {
-    const sessionId = "nested/archive-worker-lifecycle-failure";
+    const sessionId = "../archive-worker-lifecycle-failure";
     const sessionKey = "agent:main:archive-worker-lifecycle-failure";
     const scope = { sessionKey, sessionId, storePath };
     await replaceSessionEntry(scope, { sessionId, updatedAt: Date.now() });
@@ -652,7 +652,7 @@ describe("SQLite transcript archive worker", () => {
   });
 
   it("captures archive materialization failure without deleting the requested entry", async () => {
-    const sessionId = "nested/captured-archive-failure";
+    const sessionId = "../captured-archive-failure";
     const sessionKey = "agent:main:captured-archive-failure";
     const scope = { sessionKey, sessionId, storePath };
     await replaceSessionEntry(scope, { sessionId, updatedAt: Date.now() });
