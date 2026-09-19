@@ -52,9 +52,13 @@ describe("registered transcript archive filenames", () => {
   });
 
   it("hashes every other Windows-illegal character", () => {
-    for (const id of ["a<b", "a>b", 'a"b', "a/b", "a\\b", "a|b", "a?b", "a*b"]) {
+    for (const id of ["a<b", "a>b", 'a"b', "a\\b", "a|b", "a?b", "a*b", "a\tb"]) {
       expect(registryComponent(id)).toBe(expectedHashComponent(id));
     }
+  });
+
+  it("leaves slashes raw so the outside-directory guard keeps rejecting them", () => {
+    expect(() => registryComponent("a/b")).toThrow("Cannot archive SQLite transcript outside");
   });
 
   it("materializes the hashed archive file for a colon session id", () => {
