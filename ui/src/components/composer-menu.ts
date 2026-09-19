@@ -63,7 +63,7 @@ export function renderComposerMenu(options: {
 
 const lastHoverByMenu = new WeakMap<HTMLElement, { x: number; y: number }>();
 
-export function isStationaryMenuHover(event: MouseEvent): boolean {
+function isStationaryMenuHover(event: MouseEvent): boolean {
   const target = event.currentTarget;
   if (!(target instanceof HTMLElement)) {
     return false;

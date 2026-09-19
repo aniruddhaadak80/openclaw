@@ -1,6 +1,6 @@
 import { render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isStationaryMenuHover, renderComposerMenuOption } from "./composer-menu.ts";
+import { renderComposerMenuOption } from "./composer-menu.ts";
 
 describe("composer-menu stationary hover", () => {
   let container: HTMLElement;
@@ -72,7 +72,14 @@ describe("composer-menu stationary hover", () => {
   });
 
   it("fails open outside a menu root", () => {
-    expect(isStationaryMenuHover(new MouseEvent("mouseenter") as MouseEvent)).toBe(false);
+    container = document.createElement("div");
+    document.body.append(container);
+    const hover = vi.fn();
+    const option = renderOption(hover);
+
+    enterAt(option, 10, 20);
+    enterAt(option, 10, 20);
+    expect(hover).toHaveBeenCalledTimes(2);
   });
 
   afterEach(() => {
