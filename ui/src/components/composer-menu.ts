@@ -99,10 +99,10 @@ export function renderComposerMenuOption(options: {
     @mousedown=${options.preserveFocus === false ? nothing : (event: MouseEvent) => event.preventDefault()}
     @click=${options.select}
 <    @pointermove=${(event: PointerEvent) => {
-      if (!options.active && event.pointerType !== "touch" && !isStationaryMenuHover(event)) {
-        options.hover();
-      }
-    }}
+    if (!options.active && event.pointerType !== "touch" && !isStationaryMenuHover(event)) {
+      options.hover();
+    }
+  }}
   >
     <span class="slash-menu-icon" aria-hidden=${options.iconHidden ? "true" : nothing}
       >${options.icon}</span
