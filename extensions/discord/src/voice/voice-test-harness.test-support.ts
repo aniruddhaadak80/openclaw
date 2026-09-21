@@ -1,7 +1,6 @@
 import { PassThrough } from "node:stream";
 import { DAVESession } from "@discordjs/voice";
 import { VoiceOpcodes, type VoiceSendPayload } from "discord-api-types/voice/v8";
-import { createOpenClawCodingTools } from "openclaw/plugin-sdk/agent-harness";
 import { expectDefined } from "openclaw/plugin-sdk/expect-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChannelType } from "../internal/discord.js";
@@ -19,6 +18,7 @@ import {
 import { createVoiceReceiveRecoveryState, DECRYPT_FAILURE_WINDOW_MS } from "./receive-recovery.js";
 import type { VoiceRealtimeSpeakerContext, VoiceSessionEntry } from "./session.js";
 import { createDiscordVoiceTranscriptFixture } from "./transcripts.test-support.js";
+import type { DiscordVoiceReceive } from "./voice-receive.js";
 import { voiceTestMocks } from "./voice-test-mocks.test-support.js";
 
 const {
@@ -32,6 +32,7 @@ const {
   agentCommandMock,
   resolveRealtimeBootstrapContextInstructionsMock,
   resolveVoiceIngressWithParticipantsMock,
+  syntheticVoiceAdmissions,
   transcribeAudioFileMock,
   resolveAudioInputBudgetMock,
   prepareTtsRequestMock,
@@ -41,6 +42,7 @@ const {
   loggerWarnMock,
   loggerErrorMock,
   resolveConfiguredRealtimeVoiceProviderMock,
+  registerRealtimeVoiceSelectionMock,
   createRealtimeVoiceBridgeSessionMock,
   controlRealtimeVoiceAgentRunMock,
   createRealtimeSessionMock,
@@ -52,10 +54,9 @@ const {
   isSecretOwnerAvailableMock,
   canonicalizeRealtimeVoiceProviderIdMock,
 } = voiceTestMocks;
-const [managerModule, realtimeModule] = await Promise.all([
-  import("./voice-runtime.js"),
-  import("./realtime-session.runtime.js"),
-]);
+// Parallel entry points can race Vitest's async audio mock and capture different exports.
+const managerModule = await import("./voice-runtime.js");
+const realtimeModule = await import("./realtime-session.runtime.js");
 
 const { configureVoiceStateGateway, createClient, createClientWithMember } =
   createDiscordVoiceTestHelpers(updateVoiceStateMock);
@@ -159,8 +160,10 @@ function buildVoiceTestHarness() {
       suppress: false,
     });
     resolveConfiguredRealtimeVoiceProviderMock.mockClear();
+    registerRealtimeVoiceSelectionMock.mockClear();
     resolveConfiguredRealtimeVoiceProviderMock.mockReturnValue({
-      provider: { id: "openai", capabilities: { supportsActivationNameGating: true } },
+      provider: { id: "openai" },
+      capabilities: { supportsActivationNameGating: true },
       providerConfig: { model: "gpt-realtime-2", voice: "cedar" },
     });
     decodeOpusStreamChunksMock.mockReset();
@@ -292,12 +295,14 @@ function buildVoiceTestHarness() {
   const getVoiceReceive = (manager: InstanceType<typeof managerModule.DiscordVoiceManager>) =>
     (
       manager as unknown as {
-        receive: {
-          daveRecoveryAttempts: Map<string, number>;
-          handleReceiveError: (entry: unknown, error: unknown) => void;
-          handleSpeakingStart: (entry: unknown, userId: string) => Promise<void>;
-          scheduleCaptureFinalize: (entry: unknown, userId: string, reason: string) => void;
-        };
+        receive: Pick<
+          DiscordVoiceReceive,
+          | "daveRecoveryAttempts"
+          | "handleReceiveError"
+          | "handleSpeakingStart"
+          | "scheduleCaptureFinalize"
+          | "resolveDiscordVoiceIngressContext"
+        >;
       }
     ).receive;
 
@@ -313,6 +318,7 @@ function buildVoiceTestHarness() {
     params: Partial<VoiceRealtimeSpeakerContext> & {
       userId?: string;
       initialAudio?: Buffer | null;
+      realAdmission?: boolean;
     } = {},
   ) => {
     const lifecycle = entry.realtimeLifecycle;
@@ -320,17 +326,27 @@ function buildVoiceTestHarness() {
       throw new Error(`expected active Discord realtime session, got ${lifecycle.status}`);
     }
     const senderIsOwner = params.senderIsOwner ?? true;
-    const turn = lifecycle.instance.beginSpeakerTurn(
-      {
-        extraSystemPrompt: params.extraSystemPrompt,
-        senderIsOwner,
-        speakerLabel: params.speakerLabel ?? (senderIsOwner ? "Owner" : "Guest"),
-      },
-      params.userId ?? (senderIsOwner ? "u-owner" : "u-guest"),
-    );
+    const userId = params.userId ?? (senderIsOwner ? "u-owner" : "u-guest");
+    const context = {
+      extraSystemPrompt: params.extraSystemPrompt,
+      senderIsOwner,
+      speakerLabel: params.speakerLabel ?? (senderIsOwner ? "Owner" : "Guest"),
+    };
+    // Manual turns bypass ingress; retain only their explicit synthetic admission for rechecks.
+    if (params.realAdmission) {
+      syntheticVoiceAdmissions.get(entry)?.delete(userId);
+    } else {
+      let speakers = syntheticVoiceAdmissions.get(entry);
+      if (!speakers) {
+        speakers = new Map();
+        syntheticVoiceAdmissions.set(entry, speakers);
+      }
+      speakers.set(userId, context);
+    }
+    const turn = lifecycle.instance.beginSpeakerTurn(context, userId);
     // Null preserves cases that start provider output before sending the first speaker audio.
     if (params.initialAudio !== null) {
-      turn.sendInputAudio(params.initialAudio ?? Buffer.alloc(8));
+      turn.sendInputAudio(params.initialAudio ?? Buffer.alloc(3840));
     }
     return turn;
   };
@@ -339,7 +355,10 @@ function buildVoiceTestHarness() {
     const manager = createAgentProxyManager(
       undefined,
       { voice: { realtime: { consultPolicy: "auto", requireWakeName: true } } },
-      { agents: { list: [{ id: "agent-1", identity: { name: agentName } }] } },
+      {
+        agents: { list: [{ id: "agent-1", identity: { name: agentName } }] },
+        commands: { ownerAllowFrom: ["user:u-owner"] },
+      },
     );
     await manager.join({ guildId: "g1", channelId: "1001" });
     return {
@@ -377,20 +396,6 @@ function buildVoiceTestHarness() {
       lastMockCall(agentCommandMock as unknown as MockCallSource, "agent command")[0],
       "agent command args",
     );
-
-  const lastAgentCommandToolNames = () => {
-    const args = lastAgentCommandArgs();
-    if (typeof args.senderIsOwner !== "boolean") {
-      throw new Error("expected agent command owner identity");
-    }
-    return createOpenClawCodingTools({
-      config: {},
-      senderIsOwner: args.senderIsOwner,
-      messageProvider: "discord",
-      workspaceDir: "/tmp/openclaw-discord-voice-tools",
-      agentDir: "/tmp/openclaw-discord-voice-agent",
-    }).map((tool) => tool.name);
-  };
 
   const agentCommandArgsAt = (index: number) =>
     requireRecord(
@@ -574,7 +579,7 @@ function buildVoiceTestHarness() {
 
   const handleSpeakingStart = async (
     manager: InstanceType<typeof managerModule.DiscordVoiceManager>,
-    entry: unknown,
+    entry: VoiceSessionEntry,
     userId: string,
   ) => await getVoiceReceive(manager).handleSpeakingStart(entry, userId);
 
@@ -627,7 +632,6 @@ function buildVoiceTestHarness() {
     DAVESession,
     expectDefined,
     VoiceOpcodes,
-    createOpenClawCodingTools,
     expect,
     it,
     vi,
@@ -658,6 +662,7 @@ function buildVoiceTestHarness() {
     loggerWarnMock,
     loggerErrorMock,
     resolveConfiguredRealtimeVoiceProviderMock,
+    registerRealtimeVoiceSelectionMock,
     createRealtimeVoiceBridgeSessionMock,
     controlRealtimeVoiceAgentRunMock,
     createRealtimeSessionMock,
@@ -690,7 +695,6 @@ function buildVoiceTestHarness() {
     getLastAudioPlayer,
     expectOffEventWithFunction,
     lastAgentCommandArgs,
-    lastAgentCommandToolNames,
     agentCommandArgsAt,
     realtimeBridgeAt,
     lastRealtimeBridge,
@@ -721,7 +725,5 @@ export type DiscordVoiceTestHarness = ReturnType<typeof buildVoiceTestHarness>;
 export function defineDiscordVoiceTests(
   register: (harness: DiscordVoiceTestHarness) => void,
 ): void {
-  describe("DiscordVoiceManager", () => {
-    register(buildVoiceTestHarness());
-  });
+  describe("DiscordVoiceManager", () => register(buildVoiceTestHarness()));
 }

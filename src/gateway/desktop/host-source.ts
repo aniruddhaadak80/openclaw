@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import type { EnvironmentSummary } from "../../../packages/gateway-protocol/src/index.js";
 import type { DesktopHostConfig } from "../../config/types.desktop.js";
 import { registerSecretValueForRedaction } from "../../logging/secret-redaction-registry.js";
 import type { RfbAttachment } from "./attachment.js";
@@ -6,6 +7,7 @@ import { getHostDesktopGuidance } from "./host-guidance.js";
 import { HostDesktopCredentialsRequiredError } from "./host-source-errors.js";
 import {
   createManagedLinuxDesktop,
+  type DesktopComputerLease,
   type ManagedLinuxDesktop,
   type ManagedLinuxDesktopStatus,
 } from "./managed-linux.js";
@@ -127,21 +129,52 @@ function securityLabel(probe: Extract<RfbProbeResult, { kind: "rfb" }>): string 
   return probe.securityTypes.includes(19) ? "VeNCrypt" : "unsupported";
 }
 
-/** Probes the configured host desktop without reading or exposing password material. */
-export async function inspectHostDesktop(params: {
+type HostDesktopInspectionParams = {
   config?: DesktopHostConfig;
   platform?: NodeJS.Platform;
   managedDesktop?: ManagedLinuxDesktop;
   probeRfb?: typeof probeRfbServer;
-}): Promise<HostDesktopInspection> {
-  const port = params.config?.port ?? DEFAULT_HOST_DESKTOP_PORT;
+};
+
+/** Probes the configured host desktop without reading or exposing password material. */
+export async function inspectHostDesktop(
+  params: HostDesktopInspectionParams,
+): Promise<HostDesktopInspection> {
   if (params.config?.enabled !== true) {
     return {
-      status: { enabled: false, state: "disabled", port },
+      status: {
+        enabled: false,
+        state: "disabled",
+        port: params.config?.port ?? DEFAULT_HOST_DESKTOP_PORT,
+      },
       detail:
         "disabled; enable the Desktop lab with desktop.host.enabled=true, then restart the gateway",
     };
   }
+  return inspectConfiguredHostDesktop(params);
+}
+
+/** Setup inspection discovers a source without enabling access or starting a desktop. */
+export async function inspectHostDesktopSetup(
+  params: Omit<HostDesktopInspectionParams, "managedDesktop">,
+): Promise<NonNullable<EnvironmentSummary["desktopSetup"]>> {
+  const inspection = await inspectConfiguredHostDesktop(params);
+  if (inspection.status.state === "attached") {
+    return { state: "ready" };
+  }
+  if (inspection.status.state === "managed") {
+    return { state: "managed" };
+  }
+  return {
+    state: inspection.unavailableReason === "not-listening" ? "needs-server" : "unsupported",
+    detail: inspection.detail,
+  };
+}
+
+async function inspectConfiguredHostDesktop(
+  params: HostDesktopInspectionParams,
+): Promise<HostDesktopInspection> {
+  const port = params.config?.port ?? DEFAULT_HOST_DESKTOP_PORT;
   const platform = params.platform ?? process.platform;
   const probe = await (params.probeRfb ?? probeRfbServer)({
     host: "127.0.0.1",
@@ -149,7 +182,7 @@ export async function inspectHostDesktop(params: {
     timeoutMs: HOST_DESKTOP_PROBE_TIMEOUT_MS,
   });
   if (probe.kind === "unreachable" || probe.kind === "timeout") {
-    if (params.config.port === undefined && params.config.managed === true) {
+    if (params.config?.port === undefined && params.config?.managed === true) {
       if (platform !== "linux") {
         return {
           status: { enabled: true, state: "unavailable", port },
@@ -208,6 +241,7 @@ export function createHostDesktopSource(params: {
     (params.config.managed === true && platform === "linux"
       ? createManagedLinuxDesktop()
       : undefined);
+  let selectedManagedDesktop = false;
 
   const acquireAttached = async (
     probe: Extract<RfbProbeResult, { kind: "rfb" }>,
@@ -254,6 +288,7 @@ export function createHostDesktopSource(params: {
   };
 
   const acquire = async (): Promise<HostDesktopAcquireResult> => {
+    selectedManagedDesktop = false;
     const probe = await probeRfb({
       host: "127.0.0.1",
       port,
@@ -267,7 +302,9 @@ export function createHostDesktopSource(params: {
         if (!managedDesktop) {
           throw new Error("managed Linux desktop lifecycle is unavailable; restart the gateway");
         }
-        return await managedDesktop.acquire();
+        const acquired = await managedDesktop.acquire();
+        selectedManagedDesktop = true;
+        return acquired;
       }
       throw new Error(unavailableError(port, platform));
     }
@@ -279,7 +316,20 @@ export function createHostDesktopSource(params: {
 
   return {
     acquire,
-    teardown: managedDesktop ? () => managedDesktop.stop() : undefined,
+    acquireComputer: async (computerParams: { onStop(): Promise<void> }) => {
+      if (!selectedManagedDesktop || !managedDesktop) {
+        throw new Error(
+          "COMPUTER_HOST_UNAVAILABLE: the selected host desktop is an external VNC server; its local computer session is unknown",
+        );
+      }
+      return await managedDesktop.acquireComputer(computerParams);
+    },
+    teardown: managedDesktop
+      ? () => {
+          selectedManagedDesktop = false;
+          return managedDesktop.stop();
+        }
+      : undefined,
     inspect: () =>
       inspectHostDesktop({
         config: params.config,
@@ -303,6 +353,7 @@ export type HostDesktopService = {
     auth: "vnc-password" | "ard-account";
     vncPassword?: string;
   }>;
+  acquireComputer(params: { onStop(): Promise<void> }): Promise<DesktopComputerLease>;
   status(): Promise<HostDesktopStatus>;
 };
 
@@ -328,14 +379,16 @@ export function createHostDesktopService(params: {
     platform,
     ...(managedDesktop ? { managedDesktop } : {}),
   });
+  const acquire = () =>
+    params.registry.acquire({
+      sourceKey: "host",
+      ownerEpoch: 0,
+      start: source.acquire,
+      ...(source.teardown ? { teardown: source.teardown } : {}),
+    });
   return {
     async observe(observeParams) {
-      const acquired = await params.registry.acquire({
-        sourceKey: "host",
-        ownerEpoch: 0,
-        start: source.acquire,
-        ...(source.teardown ? { teardown: source.teardown } : {}),
-      });
+      const acquired = await acquire();
       const auth = acquired.auth;
       if (!auth) {
         throw new Error("gateway host desktop authentication state is unavailable; retry observe");
@@ -373,6 +426,31 @@ export function createHostDesktopService(params: {
           ? { vncPassword: acquired.vncPassword }
           : {}),
       };
+    },
+    async acquireComputer(computerParams) {
+      await acquire();
+      const activity = params.registry.retainActivity("host", 0);
+      if (!activity) {
+        throw new Error("COMPUTER_HOST_UNAVAILABLE: the host desktop stopped during acquisition");
+      }
+      try {
+        const computer = await source.acquireComputer(computerParams);
+        if (!activity.isCurrent() || !computer.isCurrent()) {
+          computer.release();
+          throw new Error("COMPUTER_HOST_UNAVAILABLE: the host desktop stopped during acquisition");
+        }
+        return {
+          env: computer.env,
+          isCurrent: () => activity.isCurrent() && computer.isCurrent(),
+          release() {
+            computer.release();
+            activity.release();
+          },
+        };
+      } catch (error) {
+        activity.release();
+        throw error;
+      }
     },
     async status() {
       return (await source.inspect()).status;

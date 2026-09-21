@@ -5,12 +5,13 @@ import type {
   OpenClawPluginNodeHostCommand,
   OpenClawPluginNodeInvokePolicy,
 } from "openclaw/plugin-sdk/plugin-entry";
+import { isSubagentSessionKey } from "openclaw/plugin-sdk/routing";
 import {
   sessionCatalogPaging,
   type SessionCatalogSession,
 } from "openclaw/plugin-sdk/session-catalog";
 import {
-  projectSessionCatalogSourceActor,
+  createSessionCatalogSourceActorProjector,
   readSessionTranscriptCatalogPage,
   readSessionTranscriptCatalogTitle,
 } from "openclaw/plugin-sdk/session-transcript-runtime";
@@ -55,6 +56,9 @@ function sharedEntries(api: OpenClawPluginApi) {
         groups.has(entry.category) &&
         entry.incognito !== true &&
         entry.visibility !== "draft" &&
+        !isSubagentSessionKey(sessionKey) &&
+        entry.createdVia !== "spawn" &&
+        !entry.spawnedBy?.trim() &&
         !/^agent:[^:]+:catalog:/i.test(sessionKey),
     );
 }
@@ -66,6 +70,7 @@ export function createSessionShareNodeCommands(
   return [
     {
       command: SESSION_SHARE_LIST_COMMAND,
+      hasActiveWork: () => false,
       cap: "openclaw-sessions",
       dangerous: false,
       isAvailable: ({ config }) => sessionShareGroups(config).length > 0,
@@ -76,7 +81,7 @@ export function createSessionShareNodeCommands(
         });
         const offset = sessionCatalogPaging.decodeCursor(params.cursor);
         const search = params.searchTerm?.toLowerCase();
-        const sessions: SessionCatalogSession[] = [];
+        const sessions = [];
         for (const { agentId, sessionKey, storePath, entry } of sharedEntries(api)) {
           const name = readSessionTranscriptCatalogTitle({ agentId, sessionKey, storePath, entry });
           if (
@@ -86,6 +91,27 @@ export function createSessionShareNodeCommands(
           ) {
             continue;
           }
+          sessions.push({
+            threadId: sessionKey,
+            name,
+            entry,
+            recencyAt: Math.max(
+              entry.updatedAt,
+              entry.lastInteractionAt ?? 0,
+              entry.lastActivityAt ?? 0,
+            ),
+          });
+        }
+        sessions.sort(
+          (left, right) =>
+            right.recencyAt - left.recencyAt || left.threadId.localeCompare(right.threadId),
+        );
+        const selected = sessions.slice(offset, offset + params.limit);
+        const projectCreator = createSessionCatalogSourceActorProjector({
+          ...source,
+          actors: selected.map(({ entry }) => entry.createdActor),
+        });
+        const page = selected.map(({ threadId, name, entry, recencyAt }): SessionCatalogSession => {
           const archived = entry.archivedAt !== undefined;
           const cwd =
             entry.execCwd ??
@@ -93,19 +119,15 @@ export function createSessionShareNodeCommands(
             entry.spawnedWorkspaceDir ??
             entry.worktree?.canonicalWorkspaceDir ??
             entry.worktree?.repoRoot;
-          sessions.push({
-            threadId: sessionKey,
+          return {
+            threadId,
             name,
             color: entry.color,
             cwd: cwd ? redactToolPayloadText(cwd).slice(0, 6000) : undefined,
             status: archived ? "archived" : "idle",
             createdAt: entry.createdAt,
             updatedAt: entry.updatedAt,
-            recencyAt: Math.max(
-              entry.updatedAt,
-              entry.lastInteractionAt ?? 0,
-              entry.lastActivityAt ?? 0,
-            ),
+            recencyAt,
             gitBranch: entry.worktree?.branch
               ? redactToolPayloadText(entry.worktree.branch).slice(0, 6000)
               : undefined,
@@ -113,18 +135,9 @@ export function createSessionShareNodeCommands(
             canContinue: false,
             canArchive: false,
             canOpenTerminal: false,
-            createdActor: projectSessionCatalogSourceActor({
-              ...source,
-              actor: entry.createdActor,
-            }),
-          });
-        }
-        sessions.sort(
-          (left, right) =>
-            (right.recencyAt ?? 0) - (left.recencyAt ?? 0) ||
-            left.threadId.localeCompare(right.threadId),
-        );
-        const page = sessions.slice(offset, offset + params.limit);
+            createdActor: projectCreator(entry.createdActor),
+          };
+        });
         return JSON.stringify({
           sessions: page,
           ...(offset + page.length < sessions.length
@@ -135,6 +148,7 @@ export function createSessionShareNodeCommands(
     },
     {
       command: SESSION_SHARE_READ_COMMAND,
+      hasActiveWork: () => false,
       cap: "openclaw-sessions",
       dangerous: false,
       isAvailable: ({ config }) => sessionShareGroups(config).length > 0,

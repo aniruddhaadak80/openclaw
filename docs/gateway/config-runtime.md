@@ -35,7 +35,7 @@ Optional global boolean for [managed worktree filesystem acceleration](/concepts
 }
 ```
 
-Set `false` to use normal Git checkout and file copying for new worktrees. This option applies across agents and managed-worktree owners; existing checkouts are unchanged. Supported backends are Btrfs snapshots on Linux and APFS file clones on macOS. Repository setup and dependencies remain per-worktree.
+Set `false` to use normal Git checkout and file copying for new worktrees. This option applies across agents and managed-worktree owners; existing checkouts are unchanged. Supported backends are Btrfs snapshots on Linux, APFS directory clones on macOS, and ReFS block clones on Windows. Repository setup and dependencies remain per-worktree.
 
 ## Models
 
@@ -131,6 +131,11 @@ Setup: `openclaw dns setup --apply`.
 - `channel`: release channel - `"stable"`, `"extended-stable"`, `"beta"`, or `"dev"`. Extended-stable is package-only: foreground commands own installation, while the Gateway may emit read-only update hints.
 - `checkOnStart`: check for updates through `https://telemetry.openclaw.ai/api/latest-version` when the Gateway starts and at most once every 24 hours afterward (default: `true`). The default request shares only the OpenClaw version and platform information in its `User-Agent`; anonymous feature statistics are included only when `telemetry.enabled` is `true`. Setting this to `false`, or setting `OPENCLAW_NO_AUTO_UPDATE=1`, prevents all automatic update requests, feature statistics, and update notices, even when `auto.enabled` is `true`. Stored extended-stable selections use the same read-only hint and 24-hour hint schedule.
 - `auto.enabled`: enable background auto-update campaigns for stable and beta package installs and dev git installs when `checkOnStart` is also enabled (default: `false`). Extended-stable never applies automatically.
+
+Headless nodes have a separate default-on `nodeHost.autoUpdate.enabled` policy
+with hourly checks and idle-only activation. `update.checkOnStart: false` and
+`OPENCLAW_NO_AUTO_UPDATE=1` disable that policy too. See
+[Headless node updates](/install/updating/automatic-updates#headless-node-updates).
 
 ---
 

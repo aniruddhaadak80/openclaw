@@ -10,6 +10,7 @@ const RUNNER_PATH = join(ROOT_DIR, "scripts/e2e/docker-package-install.sh");
 
 type PackageIdentityOptions = {
   artifactVersion: string;
+  nativeContract?: "required" | "not-applicable";
   bunCli?: string;
   bunManifest?: string;
   npmCli?: string;
@@ -112,6 +113,7 @@ esac
       FAKE_PNPM_CLI: options.pnpmCli ?? `OpenClaw ${options.artifactVersion}`,
       FAKE_PNPM_MANIFEST: options.pnpmManifest ?? options.artifactVersion,
       OPENCLAW_CURRENT_PACKAGE_TGZ: packageTgz,
+      OPENCLAW_FS_SAFE_NATIVE_CONTRACT: options.nativeContract ?? "required",
       OPENCLAW_DOCKER_ARTIFACT_IDENTITY_PATH: identityPath,
       OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS: "1",
       OPENCLAW_SKIP_DOCKER_BUILD: "1",
@@ -196,39 +198,53 @@ describe.skipIf(process.platform === "win32")("Docker package identity report", 
     expect(result.stderr).toContain("[bun] CLI output parses to '11.2.30'");
   });
 
-  it("emits complete manager-owned identity for an exact prerelease", () => {
-    const version = "2026.6.21-beta.1+build.7";
-    const { identity, result } = runPackageIdentity({ artifactVersion: version });
+  it.each([
+    { version: "2026.6.21-beta.1+build.7", nativeContract: "required" },
+    { version: "2026.6.21-beta.1+build.7", nativeContract: "not-applicable" },
+    { version: "1.2.3-beta-rc.1+build.7", nativeContract: "required" },
+  ] as const)(
+    "emits complete manager-owned identity for $version with the $nativeContract native contract",
+    ({ version, nativeContract }) => {
+      const { identity, result } = runPackageIdentity({ artifactVersion: version, nativeContract });
 
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(identity).toEqual(
-      expect.objectContaining({
-        package: expect.objectContaining({ version }),
-        containers: expect.arrayContaining([
-          expect.objectContaining({
-            role: "npm",
-            details: expect.objectContaining({
-              installedPackageVersion: version,
-              parsedOpenclawVersion: version,
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(identity).toEqual(
+        expect.objectContaining({
+          package: expect.objectContaining({ version }),
+          containers: expect.arrayContaining([
+            expect.objectContaining({
+              role: "musl",
+              details: expect.objectContaining({
+                fsSafeNative: nativeContract === "required" ? "passed" : "not-applicable",
+              }),
             }),
-          }),
-          expect.objectContaining({
-            role: "pnpm",
-            details: expect.objectContaining({
-              installedPackageVersion: version,
-              parsedOpenclawVersion: version,
+            expect.objectContaining({
+              role: "npm",
+              details: expect.objectContaining({
+                installedPackageRoot: "/usr/local/lib/node_modules/openclaw",
+                installedPackageVersion: version,
+                parsedOpenclawVersion: version,
+              }),
             }),
-          }),
-          expect.objectContaining({
-            role: "bun",
-            details: expect.objectContaining({
-              installedPackageRoot: "/fake/bun/openclaw",
-              installedPackageVersion: version,
-              parsedOpenclawVersion: version,
+            expect.objectContaining({
+              role: "pnpm",
+              details: expect.objectContaining({
+                installedPackageRoot: "/fake/pnpm/openclaw",
+                installedPackageVersion: version,
+                parsedOpenclawVersion: version,
+              }),
             }),
-          }),
-        ]),
-      }),
-    );
-  });
+            expect.objectContaining({
+              role: "bun",
+              details: expect.objectContaining({
+                installedPackageRoot: "/fake/bun/openclaw",
+                installedPackageVersion: version,
+                parsedOpenclawVersion: version,
+              }),
+            }),
+          ]),
+        }),
+      );
+    },
+  );
 });
