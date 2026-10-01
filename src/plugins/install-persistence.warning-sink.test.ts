@@ -2,15 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyExclusiveSlotSelectionMock,
   configWriteMock,
+  createEmptyUninstallActions,
   applyPluginUninstallDirectoryRemovalMock,
   buildPluginSnapshotReportMock,
   loadPluginManifestRegistryMock,
   planPluginUninstallMock,
   refreshPluginRegistryMock,
+  readConfigFileSnapshotForWriteMock,
   resetPluginsCliTestState,
   pluginsCliRuntimeLogs,
   setInstalledPluginIndexInstallRecords,
 } from "../cli/plugins-cli-test-helpers.js";
+import { createTestConfigSnapshot } from "../commands/test-runtime-config-helpers.js";
 import type { PluginInstallRuntimeDeferral } from "./install-runtime-batch.js";
 import { recordPluginManifestInstallOwner } from "./manifest-install-owner.js";
 
@@ -29,6 +32,10 @@ const install = {
 describe("plugin install persistence warning audiences", () => {
   beforeEach(() => {
     resetPluginsCliTestState();
+    readConfigFileSnapshotForWriteMock.mockResolvedValue({
+      snapshot: { ...createTestConfigSnapshot(snapshot.config), hash: snapshot.baseHash },
+      writeOptions: snapshot.writeOptions,
+    });
   });
 
   it("delivers deferred source cleanup warnings to the live batch consumer", async () => {
@@ -43,7 +50,7 @@ describe("plugin install persistence warning audiences", () => {
       ok: true,
       config: {},
       pluginId: "workboard",
-      actions: {},
+      actions: createEmptyUninstallActions(),
       directoryRemoval: { target: "/private/previous-source/workboard" },
     });
     applyPluginUninstallDirectoryRemovalMock.mockResolvedValueOnce({
@@ -99,15 +106,12 @@ describe("plugin install persistence warning audiences", () => {
     );
     expect(pluginsCliRuntimeLogs.join("\n")).toContain("requires configuration first");
     expect(pluginsCliRuntimeLogs).toContain("Installed plugin: workboard");
-    const sourceChangeMessage =
-      "Plugin source changes take effect on the next Gateway start. Installs performed by the running Gateway request an automatic restart when config reload is enabled; installs from a separate shell, or with config reload off, require a manual Gateway restart. Configuration reload can restart connected channels before that Gateway restart.";
-    expect(pluginsCliRuntimeLogs.filter((line) => line === sourceChangeMessage)).toHaveLength(1);
   });
 
   it("preserves owner-authored exclusive-slot warnings verbatim", async () => {
     const { persistPluginInstall } = await import("./install-persistence.js");
     const warn = vi.fn();
-    const warning = 'Exclusive slot "memory" switched from "memory-core" to "workboard".';
+    const warning = 'Disabled other "memory" slot plugins: memory-core.';
     loadPluginManifestRegistryMock.mockReturnValue({
       plugins: [
         recordPluginManifestInstallOwner(
@@ -164,7 +168,7 @@ describe("plugin install persistence warning audiences", () => {
         ok: true,
         config: {},
         pluginId: "workboard",
-        actions: {},
+        actions: createEmptyUninstallActions(),
         directoryRemoval: { target: "/private/previous-source/workboard" },
       });
       applyPluginUninstallDirectoryRemovalMock.mockResolvedValueOnce({

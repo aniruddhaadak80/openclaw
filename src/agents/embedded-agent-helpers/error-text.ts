@@ -13,13 +13,19 @@ import {
   isKnownTransportErrorCode,
   parseApiErrorInfo,
 } from "../../shared/assistant-error-format.js";
-import { renderAssistantRequestFailureCopy } from "../failover/assistant-request-failure-copy.js";
+import {
+  PROVIDER_SCHEMA_REJECTION_USER_TEXT,
+  renderAssistantFormatFailureCopy,
+  renderAssistantRequestFailureCopy,
+  renderFormatErrorCopy,
+} from "../failover/assistant-request-failure-copy.js";
+import { failoverReasonFromClassification } from "../failover/classification-rules.js";
 import {
   classifyFailoverSignal,
   isProviderCompletedErrorFinishReasonMessage,
-  isReasoningConstraintErrorMessage,
   isTimeoutErrorMessage,
 } from "../failover/classify.js";
+import { isReasoningConstraintErrorMessage } from "../failover/context-overflow-tables.js";
 import type { PreparedProviderFailoverOwner } from "../failover/provider-patterns.js";
 import {
   AUTH_INVALID_TOKEN_USER_TEXT,
@@ -29,9 +35,6 @@ import {
   isLikelyHttpErrorText,
   isRawApiErrorPayload,
   isStreamingJsonParseError,
-  PROVIDER_SCHEMA_REJECTION_USER_TEXT,
-  renderAssistantFormatFailureCopy,
-  renderFormatErrorCopy,
   renderRateLimitOrOverloadedCopy,
 } from "../failover/user-copy.js";
 import { formatSandboxToolPolicyBlockedMessage } from "../sandbox/runtime-status.js";
@@ -93,12 +96,7 @@ function classifyAssistantErrorFacts(msg: AssistantMessage, opts?: AssistantErro
   return {
     provider: opts?.provider ?? msg.provider ?? opts?.providerOwner?.id,
     model: opts?.model ?? msg.model,
-    reason:
-      classification?.kind === "reason"
-        ? classification.reason
-        : classification
-          ? ("context_overflow" as const)
-          : null,
+    reason: failoverReasonFromClassification(classification),
     status: signal.status ?? extractErrorHttpStatus(signal.message ?? "")?.code,
     providerRuntimeFailureKind: classifyProviderRuntimeFailureKind(signal, { providerPlugin }),
     storageFailure: classifyGatewayStorageFailure(msg),

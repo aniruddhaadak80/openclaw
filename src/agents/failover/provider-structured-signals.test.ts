@@ -10,8 +10,9 @@ import {
 import { classifyProviderRuntimeFailureKind } from "../embedded-agent-helpers/provider-runtime-failure.js";
 import { resolveFailoverReasonFromError } from "../failover-error.js";
 import { makeAssistantMessageFixture } from "../test-helpers/assistant-message-fixtures.js";
+import { PROVIDER_SCHEMA_REJECTION_USER_TEXT } from "./assistant-request-failure-copy.js";
 import { classifyFailoverSignal } from "./classify.js";
-import { formatBillingErrorMessage, PROVIDER_SCHEMA_REJECTION_USER_TEXT } from "./user-copy.js";
+import { formatBillingErrorMessage } from "./user-copy.js";
 
 const providerRuntimeMocks = vi.hoisted(() => ({
   classifyProviderFailoverSignalWithPlugin: vi.fn(),
@@ -22,6 +23,18 @@ vi.mock("../../plugins/provider-failover.js", () => providerRuntimeMocks);
 describe("provider failover hook structured signals", () => {
   beforeEach(() => {
     providerRuntimeMocks.classifyProviderFailoverSignalWithPlugin.mockReset();
+  });
+
+  it("explains a saved misalignment code without newer refusal diagnostics", () => {
+    const message = makeAssistantMessageFixture({
+      errorMessage: "This request was blocked by our safety systems.",
+      errorCode: "misalignment_policy_violation",
+      errorType: "invalid_request_error",
+      errorBody: '{"misalignment":{"detailed_explanation":"PRIVATE_FINDINGS ... [truncated]',
+    });
+    expect(formatUserFacingAssistantErrorText(message)).toBe(
+      "The provider stopped this request as a safety precaution (misalignment).",
+    );
   });
 
   it.each([

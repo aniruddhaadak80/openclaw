@@ -1,4 +1,7 @@
 import { parseCronRunScopeSuffix } from "../../sessions/session-key-utils.js";
+import { DEVICE_WORKER_PROVIDER_ID } from "./device-provider-identity.js";
+import type { WorkerEnvironmentPlacementFacts } from "./placement-read-projection.types.js";
+import { matchesWorkerPlacementTarget } from "./placement-reclaim-contract.js";
 import type { WorkerSessionPlacementRecord } from "./placement-record.js";
 import type {
   WorkerSessionPlacementRetirement,
@@ -6,6 +9,7 @@ import type {
 } from "./placement-store.js";
 import type {
   WorkerEnvironmentServiceContract,
+  WorkerPlacementCancellationTarget,
   WorkerPlacementDispatchContract,
   WorkerPlacementReclaimSourceCheck,
 } from "./service-contract.js";
@@ -20,17 +24,8 @@ export type SessionWorkerPlacementContext = {
 type PlacementMutationAction = "fork" | "reset" | "restore" | "rewind" | "switch";
 type Placement = WorkerSessionPlacementRecord;
 type PlacementState = Placement["state"];
-type PlacementOwner = Pick<
-  Placement,
-  | "sessionId"
-  | "sessionKey"
-  | "agentId"
-  | "state"
-  | "generation"
-  | "environmentId"
-  | "activeOwnerEpoch"
-  | "executionMode"
->;
+type PlacementOwner = WorkerPlacementCancellationTarget &
+  Pick<Placement, "sessionId" | "sessionKey" | "agentId" | "executionMode">;
 
 class SessionWorkerPlacementMutationError extends Error {
   constructor(state: PlacementState, action: PlacementMutationAction, key: string) {
@@ -64,7 +59,18 @@ type RetirablePlacement = Extract<Placement, { state: "local" | "reclaimed" | "f
 type FailedPlacement = Extract<Placement, { state: "failed" }>;
 
 export function isFailedWorkerPlacementEnvironmentGone(params: {
-  environmentService: SessionWorkerPlacementContext["workerEnvironmentService"];
+  environmentService:
+    | {
+        get(
+          environmentId: string,
+        ):
+          | Pick<
+              NonNullable<ReturnType<WorkerEnvironmentServiceContract["get"]>>,
+              "state" | "leaseId"
+            >
+          | undefined;
+      }
+    | undefined;
   placement: FailedPlacement;
 }): boolean {
   if (params.placement.environmentId === null) {
@@ -87,6 +93,23 @@ export function isFailedWorkerPlacementEnvironmentGone(params: {
   }
 }
 
+export function canRedispatchFailedWorkerPlacement(
+  placement: FailedPlacement,
+  environment: WorkerEnvironmentPlacementFacts | undefined,
+): boolean {
+  return Boolean(
+    placement.activeOwnerEpoch !== null &&
+    !placement.turnClaim &&
+    environment &&
+    environment.environmentId === placement.environmentId &&
+    (environment.providerId !== DEVICE_WORKER_PROVIDER_ID || environment.nodeDeviceId) &&
+    isFailedWorkerPlacementEnvironmentGone({
+      placement,
+      environmentService: { get: () => environment },
+    }),
+  );
+}
+
 function isWorkerPlacementSafeForMutation(
   context: SessionWorkerPlacementContext,
   placement: Placement,
@@ -105,19 +128,14 @@ export function resolveWorkerPlacementArchiveRestoreError(params: {
   key: string;
   placement: WorkerSessionPlacementRecord | undefined;
 }): string | undefined {
-  if (!params.placement || isWorkerPlacementSafeForMutation(params.context, params.placement)) {
+  if (
+    !params.placement ||
+    (params.placement.state === "failed" && !params.placement.turnClaim) ||
+    isWorkerPlacementSafeForMutation(params.context, params.placement)
+  ) {
     return undefined;
   }
   return `Session ${params.key} cannot change archive state while cloud worker placement is ${params.placement.state}.`;
-}
-
-function retirementGuard(placement: RetirablePlacement): SessionWorkerPlacementMutationGuard {
-  return {
-    status: "retirement-required",
-    sessionId: placement.sessionId,
-    expectedState: placement.state,
-    expectedGeneration: placement.generation,
-  };
 }
 
 function resolveSessionWorkerPlacementMutationGuard(
@@ -130,7 +148,12 @@ function resolveSessionWorkerPlacementMutationGuard(
 
   if (isWorkerPlacementSafeForMutation(params.context, placement)) {
     if (params.action === "reset") {
-      return retirementGuard(placement);
+      return {
+        status: "retirement-required",
+        sessionId: placement.sessionId,
+        expectedState: placement.state,
+        expectedGeneration: placement.generation,
+      };
     }
     // History rewrites rotate the session identity and would strand stopped cloud affinity.
     if (placement.state === "local" || params.action === "fork") {
@@ -184,10 +207,7 @@ function samePlacementOwner(
     current?.sessionId === expected?.sessionId &&
     current?.sessionKey === expected?.sessionKey &&
     current?.agentId === expected?.agentId &&
-    current?.state === expected?.state &&
-    current?.generation === expected?.generation &&
-    current?.environmentId === expected?.environmentId &&
-    current?.activeOwnerEpoch === expected?.activeOwnerEpoch &&
+    matchesWorkerPlacementTarget(current, expected) &&
     current?.executionMode === expected?.executionMode
   );
 }
@@ -210,6 +230,33 @@ export function prepareSessionWorkerPlacementMutationCheck(
   };
   assertCurrent();
   return assertCurrent;
+}
+
+/** Archive visibility can change while a failed placement retains its physical cleanup. */
+export function prepareSessionWorkerPlacementArchiveCheck(
+  params: Pick<SessionWorkerPlacementMutationParams, "context" | "sessionId">,
+): { assertCurrent: () => void; cleanupPending: boolean } {
+  const expected = readSessionWorkerPlacement(params);
+  if (expected?.state !== "failed") {
+    return {
+      assertCurrent: prepareSessionWorkerPlacementMutationCheck(params),
+      cleanupPending: false,
+    };
+  }
+  const assertCurrent = () => {
+    const current = readSessionWorkerPlacement(params);
+    if (!samePlacementOwner(expected, current) || current?.turnClaim) {
+      throw new Error(`Worker session placement ${params.sessionId} changed before archive`);
+    }
+  };
+  assertCurrent();
+  return {
+    assertCurrent,
+    cleanupPending: !isFailedWorkerPlacementEnvironmentGone({
+      environmentService: params.context.workerEnvironmentService,
+      placement: expected,
+    }),
+  };
 }
 
 /** Capture retirement without erasing cloud affinity before fallible session cleanup. */
@@ -284,7 +331,12 @@ export function prepareSessionWorkerPlacementStop(params: {
   };
   const stop = async () => {
     beforeDrain();
-    if (!expected || isWorkerPlacementSafeForMutation(context, expected) || !sessionId) {
+    if (
+      !expected ||
+      (params.action === "archive" && expected.state === "failed") ||
+      isWorkerPlacementSafeForMutation(context, expected) ||
+      !sessionId
+    ) {
       return;
     }
     if (!context.workerPlacementDispatchService?.reclaim) {
