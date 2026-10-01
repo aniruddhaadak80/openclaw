@@ -39,6 +39,7 @@ export type ExecToolArgs = Record<string, unknown> & {
   env?: Record<string, string>;
   yieldMs?: number;
   background?: boolean;
+  required?: boolean;
   timeoutSeconds?: number;
   pty?: boolean;
   elevated?: boolean;
@@ -67,6 +68,12 @@ const resolvedExecWorkdirPreparedStates = new WeakMap<
 const XML_ARG_VALUE_EXEC_PARAM_KEYS = ["command", "workdir", "host", "ask", "node"] as const;
 
 export function assertSupportedExecParams(args: unknown): void {
+  if (isRecord(args) && args.required !== undefined && typeof args.required !== "boolean") {
+    throw new ToolInputError("exec required must be a boolean");
+  }
+  if (isRecord(args) && args.required === true && args.background === true) {
+    throw new ToolInputError("required exec cannot be detached with background=true");
+  }
   if (isRecord(args) && Object.hasOwn(args, "timeout")) {
     throw new ToolInputError(
       'exec parameter "timeout" is unsupported; use "timeoutSeconds" instead',
@@ -243,7 +250,7 @@ export function createExecRequestPreparation(params: {
       return execParams;
     }
     if (isResolveExecEnvPrepared(execParams)) {
-      return markResolveExecEnvPrepared(execParams);
+      return execParams;
     }
     const hookRunner = getGlobalHookRunner();
     if (
@@ -371,7 +378,6 @@ export function resolvePreparedExecEnvironment(params: {
   pluginEnv?: Record<string, string>;
   storeEnv?: Record<string, string>;
   storeSecretEnv?: Record<string, string>;
-  secretEgressEnv?: Record<string, string>;
   credentialScrubEnv?: Readonly<Record<string, string>>;
   localIdentityEnv?: Readonly<Record<string, string>>;
   managedLocalIdentity?: boolean;
@@ -382,9 +388,6 @@ export function resolvePreparedExecEnvironment(params: {
     throw new Error(LOCAL_INSTALLATION_TARGET_UNSUPPORTED);
   }
   const inheritedBaseEnv = coerceEnv(process.env);
-  if (params.secretEgressEnv) {
-    Object.assign(inheritedBaseEnv, params.secretEgressEnv);
-  }
   const channelContextEnv = buildChannelContextEnv(params.channelContext);
   const explicitEnv: Record<string, string> | undefined =
     params.execParams.env !== undefined ||
@@ -521,9 +524,6 @@ export function resolvePreparedExecEnvironment(params: {
         env[key] = value;
       }
     }
-  }
-  if (params.secretEgressEnv) {
-    Object.assign(env, params.secretEgressEnv);
   }
   const preparedEnv = {
     ...params.localProcessEnv,

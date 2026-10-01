@@ -5,10 +5,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { promisify } from "node:util";
 import { openRootFile, readFileDescriptorBounded } from "../infra/boundary-file-read.js";
-import { pruneMapToMaxSize } from "../infra/map-size.js";
+import { LruCache } from "../infra/lru-cache.js";
 import { createLazyRuntimeModule } from "../shared/lazy-runtime.js";
-import type { AuthRateLimiter } from "./auth-rate-limit.js";
-import type { ResolvedGatewayAuth } from "./auth.js";
 import { parseControlUiResourcePath } from "./control-ui-contract.js";
 import { respondNotFound } from "./control-ui-http-utils.js";
 import { sendMethodNotAllowed } from "./http-common.js";
@@ -19,6 +17,7 @@ import {
   sendHttpImageResponse,
   type HttpImageRepresentation,
 } from "./http-image-response.js";
+import type { GatewayHttpRequestAuthOptions } from "./http-request-authority.js";
 import { authorizeControlUiSessionOwnerReadRequestOrReply } from "./http-utils.js";
 
 /**
@@ -70,12 +69,16 @@ type WorkspaceIcon = HttpImageRepresentation;
 /** `null` records a resolved absence so a workspace without an icon never re-scans. */
 type WorkspaceIconResolution = WorkspaceIcon | null;
 
-let workspaceIconCache = new Map<string, Promise<WorkspaceIconResolution>>();
-let sessionWorkspaceIconCache = new Map<string, Promise<WorkspaceIconResolution>>();
+let workspaceIconCache = new LruCache<Promise<WorkspaceIconResolution>>(
+  WORKSPACE_ICON_CACHE_MAX_ENTRIES,
+);
+let sessionWorkspaceIconCache = new LruCache<Promise<WorkspaceIconResolution>>(
+  SESSION_WORKSPACE_ICON_CACHE_MAX_ENTRIES,
+);
 
 export function clearWorkspaceIconCacheForTest(): void {
-  workspaceIconCache = new Map();
-  sessionWorkspaceIconCache = new Map();
+  workspaceIconCache = new LruCache(WORKSPACE_ICON_CACHE_MAX_ENTRIES);
+  sessionWorkspaceIconCache = new LruCache(SESSION_WORKSPACE_ICON_CACHE_MAX_ENTRIES);
 }
 
 async function readWorkspaceIconCandidate(
@@ -122,13 +125,10 @@ export function resolveWorkspaceIcon(workspaceRoot: string): Promise<WorkspaceIc
   const cacheKey = path.resolve(workspaceRoot);
   const cached = workspaceIconCache.get(cacheKey);
   if (cached) {
-    workspaceIconCache.delete(cacheKey);
-    workspaceIconCache.set(cacheKey, cached);
     return cached;
   }
   const pending = scanWorkspaceIcon(cacheKey);
   workspaceIconCache.set(cacheKey, pending);
-  pruneMapToMaxSize(workspaceIconCache, WORKSPACE_ICON_CACHE_MAX_ENTRIES);
   return pending;
 }
 
@@ -149,26 +149,13 @@ export async function prepareSessionWorkspaceIcon(params: {
     const workspaceRoot = (await getSessionsFilesModule()).resolveLocalSessionWorkspaceRoot(params);
     return workspaceRoot ? await resolveWorkspaceIcon(workspaceRoot) : null;
   })();
-  sessionWorkspaceIconCache.delete(params.sessionKey);
   // A failed optional preparation still becomes a stable fallback snapshot;
   // the returned promise rejects separately so chat.startup can record it.
   sessionWorkspaceIconCache.set(
     params.sessionKey,
     preparation.catch(() => null),
   );
-  pruneMapToMaxSize(sessionWorkspaceIconCache, SESSION_WORKSPACE_ICON_CACHE_MAX_ENTRIES);
   await preparation;
-}
-
-function readPreparedSessionWorkspaceIcon(
-  sessionKey: string,
-): Promise<WorkspaceIconResolution> | undefined {
-  const prepared = sessionWorkspaceIconCache.get(sessionKey);
-  if (prepared) {
-    sessionWorkspaceIconCache.delete(sessionKey);
-    sessionWorkspaceIconCache.set(sessionKey, prepared);
-  }
-  return prepared;
 }
 
 /**
@@ -178,12 +165,8 @@ function readPreparedSessionWorkspaceIcon(
 export async function handleWorkspaceIconHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  opts: {
-    auth: ResolvedGatewayAuth;
+  opts: GatewayHttpRequestAuthOptions & {
     basePath?: string;
-    trustedProxies?: string[];
-    allowRealIpFallback?: boolean;
-    rateLimiter?: AuthRateLimiter;
   },
 ): Promise<boolean> {
   const pathname = req.url ? new URL(req.url, "http://localhost").pathname : undefined;
@@ -197,23 +180,21 @@ export async function handleWorkspaceIconHttpRequest(
     return true;
   }
   const requestAuth = await authorizeControlUiSessionOwnerReadRequestOrReply({
+    ...opts,
     req,
     res,
-    auth: opts.auth,
-    trustedProxies: opts.trustedProxies,
-    allowRealIpFallback: opts.allowRealIpFallback,
-    rateLimiter: opts.rateLimiter,
   });
   if (!requestAuth) {
     return true;
   }
+  requestAuth.assertCurrent();
 
   if (!parsed.value) {
     res.setHeader("cache-control", "no-store");
     respondNotFound(res);
     return true;
   }
-  const prepared = readPreparedSessionWorkspaceIcon(parsed.value);
+  const prepared = sessionWorkspaceIconCache.get(parsed.value);
   if (!prepared) {
     // The header can paint before chat.startup finishes. Keep this state
     // retryable so it cannot be cached as the workspace's resolved fallback.
@@ -224,6 +205,7 @@ export async function handleWorkspaceIconHttpRequest(
     return true;
   }
   const icon = await prepared;
+  requestAuth.assertCurrent();
   if (!icon) {
     res.setHeader("cache-control", "no-store");
     respondNotFound(res);

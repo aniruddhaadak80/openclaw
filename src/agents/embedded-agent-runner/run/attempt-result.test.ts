@@ -8,7 +8,7 @@ import { makeAssistantMessageFixture } from "../../test-helpers/assistant-messag
 import { getCoreTtsAttemptResultMediaUrls } from "../../tools/tts-tool-result-provenance.js";
 import { completeEmbeddedAttemptResult, createAttemptCarryover } from "./attempt-result.js";
 import { buildPayloads } from "./payloads.test-helpers.js";
-import { buildTraceToolSummary, normalizeEmbeddedRunAttemptResult } from "./run-attempt-result.js";
+import { normalizeEmbeddedRunAttemptResult } from "./run-attempt-result.js";
 import type { EmbeddedRunAttemptResult, EmbeddedRunAttemptTrajectoryRecorder } from "./types.js";
 
 const TEST_OPERATIONAL_RUN_INSTANCE = { runId: "run-1" };
@@ -35,6 +35,7 @@ function createResultFixture(params?: {
   didSendViaMessagingTool?: boolean;
   yieldDetected?: boolean;
   yieldAcknowledgment?: string;
+  yieldMessageWaitRegistered?: boolean;
   assistantTexts?: readonly string[];
   toolMetas?: Array<{
     toolName: string;
@@ -99,6 +100,7 @@ function createResultFixture(params?: {
     getMessagingToolSentTexts: () => [],
     getMessagingToolSourceReplyPayloads: () => [],
     getSourceReplyDelivered: () => undefined,
+    getSourceReplyDeliveryState: () => undefined,
     getPendingToolMediaReply: () => params?.pendingToolMediaReply,
     getToolAutoDeliveryMediaUrls: () => params?.toolAutoDeliveryMediaUrls ?? [],
     getReplayState: () => ({ replayInvalid: false, hadPotentialSideEffects: false }),
@@ -129,6 +131,7 @@ function createResultFixture(params?: {
       readYieldState: () => ({
         yieldDetected: params?.yieldDetected ?? false,
         yieldAcknowledgment: params?.yieldAcknowledgment,
+        yieldMessageWaitRegistered: params?.yieldMessageWaitRegistered,
       }),
     },
     prepared: {
@@ -195,6 +198,7 @@ describe("attempt result projection", () => {
       fixture.input.lifecycle.readYieldState = () => ({
         yieldDetected: true,
         yieldAcknowledgment: "later yield",
+        yieldMessageWaitRegistered: true,
       });
     });
 
@@ -215,6 +219,7 @@ describe("attempt result projection", () => {
     expect(result.attemptUsage).toBeUndefined();
     expect(result).toHaveProperty("yieldDetected", undefined);
     expect(result).toHaveProperty("yieldAcknowledgment", undefined);
+    expect(result).toHaveProperty("yieldMessageWaitRegistered", undefined);
     expect(result).not.toHaveProperty("beforeAgentFinalizeRevisionReason");
   });
 
@@ -517,30 +522,22 @@ describe("attempt result projection", () => {
     },
   );
 
-  it("carries the explicit yield acknowledgment separately from continuation context", () => {
-    expect(
-      completeResult({
+  it.each([true, false, undefined])(
+    "carries yield acknowledgment and owner-recorded message wait (%s) separately from private context",
+    (yieldMessageWaitRegistered) => {
+      expect(
+        completeResult({
+          yieldDetected: true,
+          yieldAcknowledgment: "Waiting for a continuation.",
+          yieldMessageWaitRegistered,
+        }),
+      ).toMatchObject({
         yieldDetected: true,
-        yieldAcknowledgment: "Research started; results will follow.",
-      }),
-    ).toMatchObject({
-      yieldDetected: true,
-      yieldAcknowledgment: "Research started; results will follow.",
-    });
-  });
-
-  it("counts each failed tool call in the trace summary", () => {
-    expect(
-      buildTraceToolSummary({
-        toolMetas: [
-          { toolName: "bash", meta: "exit=1", isError: true },
-          { toolName: "bash", meta: "exit=2", isError: true },
-          { toolName: "bash", meta: "exit=0" },
-        ],
-        fallbackHadFailure: false,
-      }),
-    ).toEqual({ calls: 3, tools: ["bash"], failures: 2 });
-  });
+        yieldAcknowledgment: "Waiting for a continuation.",
+        yieldMessageWaitRegistered,
+      });
+    },
+  );
 
   it("defaults missing replay metadata to replay-unsafe", () => {
     const attempt = completeResult();
