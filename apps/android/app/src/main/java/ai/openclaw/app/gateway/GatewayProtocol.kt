@@ -26,6 +26,7 @@ data class GatewayRequestFrame(
   val method: String,
   val params: JsonElement? = null,
   val traceparent: String? = null,
+  val expectedProfileId: String? = null,
 )
 
 @Serializable
@@ -44,6 +45,7 @@ data class GatewayEventFrame(
   val payload: JsonElement? = null,
   val seq: Long? = null,
   val stateVersion: GatewayEventFrameStateVersion? = null,
+  val recipientProfileId: String? = null,
 )
 
 @Serializable
@@ -123,6 +125,53 @@ data class QuestionGetResult(
 @Serializable
 data class QuestionListResult(
   val questions: List<QuestionRecord>,
+)
+
+@Serializable
+data class MessageReactionSummary(
+  val emoji: String,
+  val count: Long,
+  val identities: List<MessageReactionSummaryIdentitiesItem>,
+)
+
+@Serializable
+data class SessionReactionsListParams(
+  val sessionKey: String,
+  val agentId: String? = null,
+)
+
+@Serializable
+data class SessionReactionsSetParams(
+  val sessionKey: String,
+  val agentId: String? = null,
+  val messageId: String,
+  val emoji: String,
+  val remove: Boolean? = null,
+)
+
+@Serializable
+data class SessionReactionsListResult(
+  val sessionId: String,
+  val reactions: Map<String, List<MessageReactionSummary>>,
+)
+
+@Serializable
+data class SessionReactionsSetResult(
+  val messageId: String,
+  val reactions: List<MessageReactionSummary>,
+  val mirror: SessionReactionsSetResultMirror? = null,
+)
+
+@Serializable
+data class SessionReactionEvent(
+  val sessionKey: String,
+  val agentId: String,
+  val sessionId: String,
+  val messageId: String,
+  val emoji: String,
+  val action: String,
+  val actor: SessionReactionEventActor,
+  val reactions: List<MessageReactionSummary>,
 )
 
 @Serializable
@@ -382,6 +431,27 @@ data class QuestionSecretStoreExisting(
 )
 
 @Serializable
+data class MessageReactionSummaryIdentitiesItem(
+  val id: String,
+  val label: String? = null,
+)
+
+@Serializable
+data class SessionReactionsSetResultMirror(
+  val status: String,
+  val reason: String? = null,
+)
+
+@Serializable
+data class SessionReactionEventActor(
+  val type: String,
+  val id: String,
+  val label: String? = null,
+  val avatarUrl: String? = null,
+  val identity: JsonElement? = null,
+)
+
+@Serializable
 data class ProjectsListResultProjectsItem(
   val id: String,
   val displayName: String,
@@ -609,9 +679,6 @@ enum class GatewayMethod(
   UsersAuthConnectStatus("users.authConnect.status"),
   UsersAuthConnectCancel("users.authConnect.cancel"),
   UsersAuthConnectCatalog("users.authConnect.catalog"),
-  TasksList("tasks.list"),
-  TasksGet("tasks.get"),
-  TasksCancel("tasks.cancel"),
   TaskSuggestionsList("taskSuggestions.list"),
   TaskSuggestionsCreate("taskSuggestions.create"),
   TaskSuggestionsAccept("taskSuggestions.accept"),
@@ -686,9 +753,6 @@ enum class GatewayMethod(
   SessionsViewersSet("sessions.viewers.set"),
   SessionsPreview("sessions.preview"),
   SessionsDescribe("sessions.describe"),
-  SessionsCompactionList("sessions.compaction.list"),
-  SessionsCompactionBranch("sessions.compaction.branch"),
-  SessionsCompactionRestore("sessions.compaction.restore"),
   SessionsBranchesList("sessions.branches.list"),
   SessionsBranchesSwitch("sessions.branches.switch"),
   SessionsRewind("sessions.rewind"),
@@ -854,6 +918,8 @@ enum class GatewayMethod(
   SessionSuggestionsAdd("session.suggestions.add"),
   SessionSuggestionsList("session.suggestions.list"),
   SessionSuggestionsResolve("session.suggestions.resolve"),
+  SessionReactionsSet("session.reactions.set"),
+  SessionReactionsList("session.reactions.list"),
   SessionTyping("session.typing"),
   SessionsCompanionAsk("sessions.companion.ask"),
   SessionsCompanionState("sessions.companion.state"),
@@ -862,8 +928,6 @@ enum class GatewayMethod(
   SkillsProposalsEventsList("skills.proposals.events.list"),
   SkillsProposalsEvaluate("skills.proposals.evaluate"),
   HooksStatus("hooks.status"),
-  TasksRetry("tasks.retry"),
-  TasksDismiss("tasks.dismiss"),
   AuditRunInspect("audit.run.inspect"),
   SessionsPatchMany("sessions.patchMany"),
   UpdateHold("update.hold"),
@@ -932,7 +996,6 @@ enum class GatewayMethod(
   PluginsCatalogBrowse("plugins.catalog.browse"),
   PluginsCatalogCategories("plugins.catalog.categories"),
   PluginsCatalogGet("plugins.catalog.get"),
-  TasksHistory("tasks.history"),
   EnvironmentsPrepare("environments.prepare"),
   ModelsAuthRefresh("models.authRefresh"),
   ModelsAuthLogin("models.authLogin"),
@@ -941,6 +1004,54 @@ enum class GatewayMethod(
   SessionsStorageRun("sessions.storage.run"),
   PluginsReload("plugins.reload"),
   ClawsPackagesRemove("claws.packages.remove"),
+  CanvasDocumentPreview("canvas.document.preview"),
+  ComputerStatus("computer.status"),
+  ComputerInvoke("computer.invoke"),
+  SessionsActivitySummaryEnsure("sessions.activitySummary.ensure"),
+  ControlUiSessionPullRequestsChecks("controlUi.sessionPullRequests.checks"),
+  DiagnosticsCpuProfile("diagnostics.cpuProfile"),
+  TalkVoiceGet("talk.voice.get"),
+  TalkVoiceSet("talk.voice.set"),
+  TalkVoiceComplete("talk.voice.complete"),
+  PluginsCredentialsInspect("plugins.credentials.inspect"),
+  PluginsSkillsRead("plugins.skills.read"),
+  DiagnosticsHeapProfile("diagnostics.heapProfile"),
+  DesktopRelease("desktop.release"),
+  McpAuthLogin("mcp.authLogin"),
+  EnvironmentsSessionStatus("environments.session.status"),
+  EnvironmentsSessionCreate("environments.session.create"),
+  EnvironmentsSessionDestroy("environments.session.destroy"),
+  EnvironmentsSessionExec("environments.session.exec"),
+  SessionsSetInvolvement("sessions.setInvolvement"),
+  TranscriptsSummarize("transcripts.summarize"),
+  ControlUiLinkPreview("controlUi.linkPreview"),
+  ThemesList("themes.list"),
+  ThemesGet("themes.get"),
+  ThemesSet("themes.set"),
+  ThemesImport("themes.import"),
+  ControlUiGithubDetail("controlUi.githubDetail"),
+  ProgressCardRefresh("progressCard.refresh"),
+  WebSearchStatus("webSearch.status"),
+  WebSearchTest("webSearch.test"),
+  SessionsProviderReviewContinue("sessions.providerReview.continue"),
+  UsersLinkChannelIdentity("users.linkChannelIdentity"),
+  UsersUnlinkChannelIdentity("users.unlinkChannelIdentity"),
+  UsersListChannelIdentities("users.listChannelIdentities"),
+  UsersPersonalFileGet("users.personalFile.get"),
+  UsersPersonalFileSet("users.personalFile.set"),
+  PortalSessionList("portal.session.list"),
+  PortalSessionOpen("portal.session.open"),
+  PortalSessionClose("portal.session.close"),
+  CronHistory("cron.history"),
+  PresenceActivity("presence.activity"),
+  PresenceQuery("presence.query"),
+  UsersMerge("users.merge"),
+  GatewayStopRequest("gateway.stop.request"),
+  DiagnosticsHeapSnapshot("diagnostics.heapSnapshot"),
+  SessionsCatalogImport("sessions.catalog.import"),
+  BackupStatus("backup.status"),
+  StorageLocationsList("storage.locations.list"),
+  StorageLocationsProbe("storage.locations.probe"),
 }
 
 enum class GatewayEvent(
@@ -954,11 +1065,13 @@ enum class GatewayEvent(
   UiCommand("ui.command"),
   SessionApproval("session.approval"),
   SessionMessage("session.message"),
+  SessionNarration("session.narration"),
   SessionObserver("session.observer"),
   SessionOperation("session.operation"),
   SessionSharing("session.sharing"),
   SessionSharingEvidence("session.sharing.evidence"),
   SessionSuggestion("session.suggestion"),
+  SessionReaction("session.reaction"),
   SessionTyping("session.typing"),
   SessionTool("session.tool"),
   SessionsChanged("sessions.changed"),
@@ -968,12 +1081,12 @@ enum class GatewayEvent(
   Tick("tick"),
   TalkMode("talk.mode"),
   TalkEvent("talk.event"),
+  TalkVoiceChange("talk.voice.change"),
   Shutdown("shutdown"),
   GatewaySuspension("gateway.suspension"),
   Health("health"),
   Heartbeat("heartbeat"),
   Cron("cron"),
-  Task("task"),
   TaskSuggestion("task.suggestion"),
   NodePairRequested("node.pair.requested"),
   NodePairResolved("node.pair.resolved"),
@@ -991,6 +1104,7 @@ enum class GatewayEvent(
   UsersPrefsChanged("users.prefs.changed"),
   SkillsChanged("skills.changed"),
   PluginsChanged("plugins.changed"),
+  PluginsInstallProgress("plugins.install.progress"),
   VoicewakeChanged("voicewake.changed"),
   VoicewakeRoutingChanged("voicewake.routing.changed"),
   ExecApprovalRequested("exec.approval.requested"),
