@@ -14,6 +14,7 @@ export function splitArgsPreservingQuotes(
   const args: string[] = [];
   let current = "";
   let quoteChar: ArgSplitQuoteChar | null = null;
+  let quoted = false;
   const escapeMode = options?.escapeMode ?? "none";
   const quoteChars = new Set<ArgSplitQuoteChar>(options?.quoteChars ?? ['"']);
   const quoteStart = options?.quoteStart ?? "anywhere";
@@ -40,19 +41,21 @@ export function splitArgsPreservingQuotes(
       const canOpenQuote = quoteStart === "anywhere" || current.length === 0;
       if (!quoteChar && canOpenQuote) {
         quoteChar = char as ArgSplitQuoteChar;
+        quoted = true;
         continue;
       }
     }
     if (!quoteChar && /\s/.test(char)) {
-      if (current) {
+      if (current || quoted) {
         args.push(current);
         current = "";
+        quoted = false;
       }
       continue;
     }
     current += char;
   }
-  if (current) {
+  if (current || quoted) {
     args.push(current);
   }
   return args;
