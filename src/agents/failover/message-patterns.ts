@@ -231,6 +231,7 @@ const ERROR_PATTERNS = {
   billing: [
     BILLING_ERROR_HARD_402_RE,
     /\b(?:got|returned|received)\s+(?:a\s+)?402\b(?!\s+records\b)/i,
+    /\breturned a billing error\b/i,
     "payment required",
     "insufficient credits",
     /used\s+all\s+available\s+credits/i,
