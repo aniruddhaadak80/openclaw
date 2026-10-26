@@ -150,7 +150,7 @@ openclaw gateway auth-token --show
 
 The command resolves `gateway.auth.token`, `OPENCLAW_GATEWAY_TOKEN`, and configured SecretRefs, then prints only the token. It requires an interactive terminal and refuses redirected or piped output so the credential does not silently enter command logs. Treat the terminal output as a secret.
 
-If no persistent token is configured, run `openclaw doctor --generate-gateway-token`, restart the Gateway, and then rerun the command. Generic `openclaw config get` output remains redacted, including `--json`.
+If no persistent token is configured, run `openclaw doctor --generate-gateway-token`, restart the Gateway, and then rerun the command. Generic `openclaw config get` output remains redacted, including `--json`. On Windows, if PowerShell reports that running scripts is disabled, follow [PowerShell blocks the openclaw command](/platforms/windows#powershell-blocks-the-openclaw-command) and use the `.cmd` launcher for the Doctor command.
 
 ## Recover an unverifiable state lock
 

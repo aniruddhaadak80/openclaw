@@ -200,6 +200,13 @@ openclaw doctor
 openclaw gateway status --json
 ```
 
+If the first command reports
+`openclaw.ps1 cannot be loaded because running scripts is disabled on this
+system`, PowerShell is resolving bare `openclaw` to the npm PowerShell shim and
+blocking it under the current execution policy. OpenClaw itself is unaffected;
+see [PowerShell blocks the openclaw command](#powershell-blocks-the-openclaw-command)
+for the launcher workaround.
+
 Local `read`, `write`, and `edit` tools accept Git Bash (`/f/...`), Cygwin
 (`/cygdrive/f/...`), and WSL-style (`/mnt/f/...`) drive paths when the Gateway runs
 natively on Windows. These paths resolve to the corresponding Windows drive.
@@ -491,6 +498,45 @@ Notes:
 - Use `listenaddress=0.0.0.0` for LAN access, `127.0.0.1` for local-only access.
 
 ## Troubleshooting
+
+### PowerShell blocks the openclaw command
+
+On npm-style Windows installations, the npm global directory contains three
+launcher files for the CLI: `openclaw.ps1`, `openclaw.cmd`, and a bare `openclaw`
+shim for shell environments like Git Bash. When PowerShell's execution policy
+is Restricted, OpenClaw never starts: PowerShell resolves bare `openclaw` to
+`openclaw.ps1` and refuses it with
+`File ...\openclaw.ps1 cannot be loaded because running scripts is disabled on
+this system` (error `UnauthorizedAccess`). `Get-Command openclaw` shows the
+resolved `openclaw.ps1` `ExternalScript`.
+
+OpenClaw and its commands are not affected: the `.cmd` launcher runs the CLI
+through Node directly, and `.cmd` files are handed to cmd.exe on Windows, so
+the PowerShell script execution policy does not apply. Invoke the launcher
+explicitly with its full path:
+
+```powershell
+& "$env:APPDATA\npm\openclaw.cmd" --version
+& "$env:APPDATA\npm\openclaw.cmd" doctor --generate-gateway-token
+```
+
+With a custom npm prefix, point at the launcher inside that prefix instead of
+`$env:APPDATA\npm`. `npm config get prefix` prints the prefix directory from
+the same npm installation that installed OpenClaw, and the `.cmd` launcher sits
+directly in that directory.
+
+Because `cmd.exe` resolves bare `openclaw` to `openclaw.cmd` (`openclaw.ps1` is
+not in `cmd.exe`'s search list), recovery commands also run unqualified from a
+regular Command Prompt:
+
+```console
+openclaw doctor --generate-gateway-token
+```
+
+Keep the execution policy alone while recovering. Doctor's gateway-token
+generation may ask whether to pause the managed Gateway, requires a Gateway
+restart to serve the new token, and tokens or password changes require
+reconnecting or re-pairing existing clients.
 
 ### The Gateway Scheduled Task is disabled
 
